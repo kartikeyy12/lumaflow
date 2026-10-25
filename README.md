@@ -1,0 +1,117 @@
+# LumaFlow
+
+**Find your rhythm. Stay in the flow.**
+
+A minimal, ambient study timer designed for focused work, deliberate breaks, and consistent study habits. It runs entirely in your browser: no account, no server, no network calls.
+
+![LumaFlow focus session](docs/screenshots/focus.png)
+
+## Features
+
+- **Focus, short break and long break** timers. Defaults are 25 / 5 / 15 minutes, and every length is configurable (1 to 180 minutes for focus).
+- **Reliable timing.** The countdown is computed from an absolute end timestamp, never from counting interval ticks, so it stays correct through background tabs, throttling, laptop sleep and reloads.
+- **A calm ribbon animation** that drifts slowly behind the timer. It has a distinct pose for focus, short break, long break, paused and completed, and eases between them. It never speeds up or brightens as time runs out.
+- **Session tracking.** Completed sessions and total focus time for today, plus an optional daily goal shown as a quiet progress bar.
+- **Session notes.** Write what you are studying before you start, and add an optional "review next" note when a session ends.
+- **History.** Date, time, duration, topic and whether each session finished or ended early. Delete single entries or clear everything (with confirmation).
+- **Optional extras, all off by default:** soft chime, browser notification, automatic phase transitions (capped at 4 in a row, so it never loops unattended).
+- **Keyboard first**, with a built-in shortcut list (`?`).
+- **Accessible:** semantic HTML, labelled controls, visible focus rings, status shown with text and icons rather than colour alone, screen reader announcements for state changes, and full `prefers-reduced-motion` support.
+- **Works offline** once loaded. The font is bundled.
+
+| Session complete | History |
+| --- | --- |
+| ![Complete](docs/screenshots/complete.png) | ![History](docs/screenshots/history.png) |
+
+| Settings | Phone |
+| --- | --- |
+| ![Settings](docs/screenshots/settings.png) | <img src="docs/screenshots/mobile.png" width="220" alt="Mobile layout"> |
+
+## Tech stack
+
+React 19, TypeScript, Vite, plain CSS, Canvas 2D for the ribbon. Geist font via `@fontsource-variable/geist` (bundled, no CDN). Tests use Vitest and Playwright.
+
+## Prerequisites
+
+- Node.js 22.12 or newer (required by Vitest 5; the app itself builds on Node 20.19+)
+- npm
+
+## Install and run
+
+```bash
+npm install
+npm run dev
+```
+
+Open http://localhost:5173.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm run build` | Typecheck and build to `dist/` |
+| `npm run preview` | Serve the production build on port 4173 |
+| `npm run typecheck` | TypeScript check only |
+| `npm test` | Unit tests (Vitest) |
+| `npm run test:e2e` | Browser tests (Playwright, builds and serves the production bundle) |
+
+For the browser tests, install a browser once with `npx playwright install chromium`. To use a Chromium you already have, set `LUMAFLOW_CHROMIUM` to its path.
+
+To use the built app, serve `dist/` with any static file server (`npm run preview` is the easiest). Opening `index.html` straight from disk will not work because the app uses ES modules.
+
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| `Space` | Start, pause or resume |
+| `R` | Reset (press twice when a session is under way) |
+| `1` / `2` / `3` | Focus / short break / long break |
+| `F` | Toggle full screen |
+| `?` | Show the shortcut list |
+| `Esc` | Cancel a pending reset, or close a panel |
+
+Shortcuts are ignored while you type in a field or while a dialog is open. When a button has focus, `Space` presses that button instead.
+
+## How the timer works
+
+- A running phase stores `targetAt` (epoch milliseconds). Remaining time is always `targetAt - now`. A pause stores the remainder, and resume sets a new `targetAt`.
+- The state is saved to `localStorage` every few seconds and on every action. After a reload, the app recomputes everything from the saved timestamps.
+- If a phase ended while the app was closed or the device asleep, it is marked complete **silently**: no sound, no notification, no automatic next phase, and a short message explains what happened. The session is logged at its real end time.
+- Each phase has a unique id, and the log refuses duplicate ids, so a session can only be recorded once however many times the page reloads or ticks.
+- **Ending a focus session early** (reset or switching mode after at least 1 minute of progress) logs the time spent as "ended early". Early sessions add to today's focused time but are not counted as completed sessions. Under a minute is not logged.
+- **Daily totals** use your local calendar day. A session belongs to the day on which it ended.
+
+## Data and privacy
+
+Everything stays in your browser's `localStorage` under keys starting with `lumaflow.v1.`: settings, the current timer state, and up to 1000 history entries. Nothing is sent anywhere. Clear it from the History panel, or by clearing site data in your browser. If `localStorage` is unavailable (some private modes), the app still works for the current page but cannot remember anything.
+
+## Known limitations
+
+- **One tab at a time.** Two tabs can both fire a chime or notification for the same session. The history still records it once.
+- **Fully backgrounded tabs.** Browsers can throttle timers to about once a minute. The recorded time is exact, but the chime or notification may arrive up to roughly a minute late.
+- **Chime needs a gesture.** Browsers block audio until you interact with the page. Starting the timer counts, so this only matters if you enable sound mid-session and never touch the page.
+- **Notifications** need explicit permission and a secure context (`localhost` or HTTPS).
+- **No cross-device sync.** By design.
+- Automated tests run in Chromium only. Firefox and Safari should work but are unverified.
+
+LumaFlow is a focus aid. It is not a substitute for active recall, practice questions, spaced repetition or sleep, and it makes no claims about improving memory or marks.
+
+## Project structure
+
+```
+src/
+  core/        Pure logic, no React: timer.ts (state transitions), stats.ts, storage.ts,
+               format.ts, controller.ts (persistence, ticking, events), plus unit tests
+  flow/        Ribbon maths and drawing (flow.ts)
+  components/  TimerDial, ModeTabs, Controls, StatsDock, dialogs, FlowCanvas
+  hooks/       useTimer, useShortcuts, useReducedMotion
+  feedback/    chime.ts (WebAudio), notify.ts (Notifications API)
+  styles.css
+e2e/           Playwright browser tests
+docs/screenshots/
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE). The Geist font is bundled under its own SIL Open Font License via `@fontsource-variable/geist`.
