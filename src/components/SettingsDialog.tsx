@@ -3,6 +3,7 @@ import { LIMITS, MAX_AUTO_CHAIN } from '../core/timer'
 import type { Settings, TimerState } from '../core/types'
 import { previewChime } from '../feedback/chime'
 import { notificationPermission, requestNotificationPermission } from '../feedback/notify'
+import { SCENES } from '../flow/scenes'
 import { Modal } from './Modal'
 
 interface Props {
@@ -19,6 +20,27 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
 
   return (
     <Modal open={open} title="Settings" onClose={onClose}>
+      <section className="set-group" aria-labelledby="set-bg">
+        <h3 id="set-bg">Background</h3>
+        <div className="scenes" role="radiogroup" aria-labelledby="set-bg">
+          {SCENES.map((s) => (
+            <label key={s.id} className="scene-opt" data-scene-opt={s.id}>
+              <input
+                type="radio"
+                name="scene"
+                value={s.id}
+                checked={settings.scene === s.id}
+                onChange={() => onChange({ scene: s.id })}
+              />
+              <span className="scene-swatch" aria-hidden="true" />
+              <span className="scene-name">{s.label}</span>
+              <span className="scene-note">{s.note}</span>
+            </label>
+          ))}
+        </div>
+        <p className="muted small">Press B anywhere to switch to the next one.</p>
+      </section>
+
       <section className="set-group" aria-labelledby="set-lengths">
         <h3 id="set-lengths">Session lengths</h3>
         <div className="set-grid">
@@ -34,9 +56,7 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
           />
         </div>
         <p className="muted small">
-          {active
-            ? 'A session is under way, so new lengths apply from the next one.'
-            : 'Any length works. 25 and 5 are only the defaults.'}
+          {active ? 'A session is running, so new lengths apply from the next one.' : '25 and 5 are only defaults. Use whatever suits you.'}
         </p>
       </section>
 
@@ -45,28 +65,24 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
         <GoalField minutes={settings.dailyGoalMin} onCommit={(v) => onChange({ dailyGoalMin: v })} />
       </section>
 
-      <section className="set-group" aria-labelledby="set-flow">
-        <h3 id="set-flow">Flow</h3>
+      <section className="set-group" aria-labelledby="set-alerts">
+        <h3 id="set-alerts">When a session ends</h3>
+        <p className="muted small">The screen always shows it. Everything below is optional.</p>
         <Toggle
           label="Start the next phase automatically"
-          hint={`Runs up to ${MAX_AUTO_CHAIN} phases in a row, then waits for you.`}
+          hint={`Up to ${MAX_AUTO_CHAIN} in a row, then it waits for you.`}
           checked={settings.autoAdvance}
           onChange={(v) => onChange({ autoAdvance: v })}
         />
-      </section>
-
-      <section className="set-group" aria-labelledby="set-alerts">
-        <h3 id="set-alerts">End of session</h3>
-        <p className="muted small">The screen always shows when a session ends. These are optional extras.</p>
         <Toggle
           label="Play a soft chime"
-          hint="Off by default. Needs a click or key press on the page first, which starting the timer provides."
+          hint="Browsers need a click or key press first. Starting the timer counts."
           checked={settings.sound}
           onChange={(v) => onChange({ sound: v })}
         />
         {settings.sound && (
           <div className="volume">
-            <label htmlFor="vol">Volume</label>
+            <label htmlFor="vol">Chime volume</label>
             <input
               id="vol"
               type="range"
@@ -82,13 +98,13 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
           </div>
         )}
         <Toggle
-          label="Browser notification when the window is in the background"
+          label="Notify me when the window is in the background"
           hint={
             notificationPermission() === 'unsupported'
               ? 'Not supported in this browser.'
               : notificationPermission() === 'denied'
-                ? 'Blocked in your browser settings for this site.'
-                : 'Asks for permission when you turn it on.'
+                ? 'Blocked for this site in your browser settings.'
+                : 'Your browser will ask for permission.'
           }
           checked={settings.notifications && notificationPermission() === 'granted'}
           disabled={notificationPermission() === 'unsupported' || notificationPermission() === 'denied'}
@@ -113,6 +129,23 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
             {notifyMsg}
           </p>
         )}
+      </section>
+
+      <section className="set-group" aria-labelledby="set-noise">
+        <h3 id="set-noise">Brown noise</h3>
+        <div className="volume volume-flat">
+          <label htmlFor="noise-vol">Volume</label>
+          <input
+            id="noise-vol"
+            type="range"
+            min={0.05}
+            max={1}
+            step={0.05}
+            value={settings.noiseVolume}
+            onChange={(e) => onChange({ noiseVolume: Number(e.target.value) })}
+          />
+        </div>
+        <p className="muted small">Turn it on with the speaker button or M. It always starts off.</p>
       </section>
     </Modal>
   )

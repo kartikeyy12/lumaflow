@@ -16,6 +16,7 @@ interface Props {
 }
 
 function outcomeLabel(e: LogEntry): string {
+  if (e.stopwatch) return 'Stopwatch'
   if (e.outcome === 'early') return `Ended early · planned ${formatDuration(e.plannedMs)}`
   if (e.away) return 'Finished while away'
   return 'Completed'

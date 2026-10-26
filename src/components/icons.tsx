@@ -47,6 +47,27 @@ export const IconHistory = () => (
   </svg>
 )
 
+export const IconSound = () => (
+  <svg {...base}>
+    <path d="M4 10v4h3.5L12 18V6L7.5 10H4z" />
+    <path d="M15.5 9.2a4 4 0 0 1 0 5.6M18 7a7 7 0 0 1 0 10" />
+  </svg>
+)
+
+export const IconScene = () => (
+  <svg {...base}>
+    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+    <path d="M3.5 15l4.2-4 3.6 3.4 2.6-2.4 6.6 5.6" />
+    <circle cx="16.5" cy="9.5" r="1.1" />
+  </svg>
+)
+
+export const IconCheck = () => (
+  <svg {...base} width={16} height={16}>
+    <path d="M5 12.5l4.2 4.2L19 7" />
+  </svg>
+)
+
 export const IconClose = () => (
   <svg {...base} width={16} height={16}>
     <path d="M6 6l12 12M18 6L6 18" />

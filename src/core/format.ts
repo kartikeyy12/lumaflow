@@ -9,6 +9,11 @@ export function formatClock(ms: number): string {
   return `${String(m).padStart(2, '0')}:${ss}`
 }
 
+/** Count-up clock: rounds down, so it shows 00:00 until a full second has passed. */
+export function formatElapsed(ms: number): string {
+  return formatClock(Math.floor(Math.max(0, ms) / 1000) * 1000)
+}
+
 /** "1h 25m", "40m", "0m". */
 export function formatDuration(ms: number): string {
   const totalMin = Math.max(0, Math.round(ms / 60_000))
@@ -39,3 +44,16 @@ export const MODE_LABEL = {
   short: 'Short break',
   long: 'Long break',
 } as const
+
+/** "1 hour 5 minutes 3 seconds", for screen readers. */
+export function spokenDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = total % 60
+  const parts: string[] = []
+  if (h) parts.push(`${h} ${h === 1 ? 'hour' : 'hours'}`)
+  if (m) parts.push(`${m} ${m === 1 ? 'minute' : 'minutes'}`)
+  if (sec || parts.length === 0) parts.push(`${sec} ${sec === 1 ? 'second' : 'seconds'}`)
+  return parts.join(' ')
+}

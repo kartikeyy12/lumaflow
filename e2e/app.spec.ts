@@ -144,7 +144,7 @@ test.describe('persistence and recovery', () => {
   test('settings change the timer and survive a reload', async ({ page }) => {
     await open(page)
     await page.getByRole('button', { name: 'Settings' }).click()
-    const focus = page.getByLabel('Focus', { exact: true })
+    const focus = page.getByRole('spinbutton', { name: 'Focus' })
     await focus.fill('50')
     await focus.blur()
     await page.getByRole('button', { name: 'Close Settings' }).click()

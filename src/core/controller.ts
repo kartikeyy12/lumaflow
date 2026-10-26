@@ -3,13 +3,26 @@ import {
   KEYS,
   loadLog,
   loadSettings,
+  loadStopwatch,
   loadTimer,
+  loadView,
   sanitizeLog,
   sanitizeSettings,
+  sanitizeStopwatch,
   sanitizeTimer,
+  sanitizeView,
   save,
   type StorageLike,
 } from './storage'
+import {
+  createStopwatch,
+  swElapsed,
+  swEntry,
+  swEvaluate,
+  swPause,
+  swStart,
+  swTouch,
+} from './stopwatch'
 import {
   applySettingsToPhase,
   beginNext,
@@ -24,10 +37,12 @@ import {
   switchMode,
   touch,
 } from './timer'
-import type { LogEntry, Mode, Settings, TimerEvent, TimerState } from './types'
+import type { LogEntry, Mode, Settings, StopwatchState, TimerEvent, TimerState, View } from './types'
 
 export interface Snapshot {
   timer: TimerState
+  stopwatch: StopwatchState
+  view: View
   settings: Settings
   log: LogEntry[]
   /** Clock reading used for this snapshot. Components derive remaining time from it. */
@@ -54,6 +69,8 @@ const TICK_MS = 250
  */
 export class TimerController {
   private timer: TimerState
+  private stopwatch: StopwatchState
+  private view: View
   private settings: Settings
   private log: LogEntry[]
   private notice: string | null = null
@@ -74,6 +91,8 @@ export class TimerController {
     this.settings = loadSettings(this.storage)
     this.log = loadLog(this.storage)
     this.timer = loadTimer(this.storage) ?? createPhase('focus', this.settings, now)
+    this.stopwatch = loadStopwatch(this.storage) ?? createStopwatch(now)
+    this.view = loadView(this.storage)
     this.snapshot = this.buildSnapshot(now)
     this.restore(now)
   }
@@ -88,7 +107,15 @@ export class TimerController {
   getSnapshot = (): Snapshot => this.snapshot
 
   private buildSnapshot(now: number): Snapshot {
-    return { timer: this.timer, settings: this.settings, log: this.log, now, notice: this.notice }
+    return {
+      timer: this.timer,
+      stopwatch: this.stopwatch,
+      view: this.view,
+      settings: this.settings,
+      log: this.log,
+      now,
+      notice: this.notice,
+    }
   }
 
   private publish(now = this.clock()) {
@@ -99,11 +126,20 @@ export class TimerController {
 
   private displayKey(now: number): string {
     const sec = Math.ceil(getRemaining(this.timer, now) / 1000)
-    return `${this.timer.phaseId}|${this.timer.status}|${sec}|${dayKey(now)}`
+    const up = Math.floor(swElapsed(this.stopwatch, now) / 1000)
+    return `${this.view}|${this.timer.phaseId}|${this.timer.status}|${sec}|${this.stopwatch.status}|${up}|${dayKey(now)}`
   }
 
   private persistTimer() {
     this.write(KEYS.timer, this.timer)
+  }
+
+  private persistStopwatch() {
+    this.write(KEYS.stopwatch, this.stopwatch)
+  }
+
+  private persistView() {
+    this.write(KEYS.view, this.view)
   }
 
   private write(key: string, value: unknown) {
@@ -132,7 +168,22 @@ export class TimerController {
     } else if (before.status === 'completed') {
       this.notice = null
     }
+    const sw = this.stopwatch
+    if (sw.status === 'running') {
+      const res = swEvaluate(sw, now)
+      if (res.away) {
+        this.stopwatch = res.state
+        this.notice = 'Your stopwatch paused while you were away. The time away was not counted.'
+      } else {
+        this.stopwatch = swTouch(sw, now)
+        this.notice = 'Welcome back. Your stopwatch kept running.'
+      }
+    } else if (sw.status === 'paused' && this.view === 'stopwatch') {
+      this.notice = 'Welcome back. Your stopwatch is paused where you left it.'
+    }
     this.persistTimer()
+    this.persistStopwatch()
+    this.persistView()
     this.write(KEYS.settings, this.settings)
     this.publish(now)
   }
@@ -155,6 +206,17 @@ export class TimerController {
     if (e.key === KEYS.log || e.key === null) {
       this.log = sanitizeLog(this.parse(e.newValue))
       this.written[KEYS.log] = e.newValue
+    }
+    if (e.key === KEYS.stopwatch || e.key === null) {
+      const sw = sanitizeStopwatch(this.parse(e.newValue))
+      if (sw) {
+        this.written[KEYS.stopwatch] = e.newValue
+        this.stopwatch = sw
+      }
+    }
+    if (e.key === KEYS.view || e.key === null) {
+      this.view = sanitizeView(this.parse(e.newValue))
+      this.written[KEYS.view] = e.newValue
     }
     this.publish(now)
   }
@@ -198,8 +260,13 @@ export class TimerController {
   }
 
   private flush = () => {
-    this.timer = touch(this.timer, this.clock())
+    const now = this.clock()
+    this.timer = touch(this.timer, now)
     this.persistTimer()
+    if (this.stopwatch.status === 'running') {
+      this.stopwatch = swTouch(this.stopwatch, now)
+      this.persistStopwatch()
+    }
   }
 
   /**
@@ -218,6 +285,20 @@ export class TimerController {
     if (this.timer.status === 'running' && now - this.timer.lastSeenAt >= HEARTBEAT_MS) {
       this.timer = touch(this.timer, now)
       this.persistTimer()
+    }
+    if (this.stopwatch.status === 'running') {
+      const sw = swEvaluate(this.stopwatch, now)
+      if (sw.away) {
+        this.stopwatch = sw.state
+        this.notice = 'Your stopwatch paused while you were away. The time away was not counted.'
+        this.persistStopwatch()
+        this.publish(now)
+        return
+      }
+      if (now - this.stopwatch.lastSeenAt >= HEARTBEAT_MS) {
+        this.stopwatch = swTouch(this.stopwatch, now)
+        this.persistStopwatch()
+      }
     }
     if (force || this.displayKey(now) !== this.lastKey) this.publish(now)
   }
@@ -258,6 +339,10 @@ export class TimerController {
 
   start = () => {
     const now = this.clock()
+    if (this.view === 'stopwatch') {
+      this.actStopwatch(swStart(this.stopwatch, now))
+      return
+    }
     if (this.timer.status === 'completed') {
       this.act(beginNext(this.timer, this.settings, now, { startNow: true }))
       return
@@ -265,23 +350,78 @@ export class TimerController {
     this.act(start(this.timer, now))
   }
 
-  pause = () => this.act(pause(this.timer, this.clock()))
+  pause = () => {
+    const now = this.clock()
+    if (this.view === 'stopwatch') this.actStopwatch(swPause(this.stopwatch, now))
+    else this.act(pause(this.timer, now))
+  }
 
   toggle = () => {
-    if (this.timer.status === 'running') this.pause()
+    const running = this.view === 'stopwatch' ? this.stopwatch.status === 'running' : this.timer.status === 'running'
+    if (running) this.pause()
     else this.start()
   }
 
-  /** Abandons the current phase. Focus time already spent is logged as ended early. */
+  /**
+   * Timer: abandons the phase, logging focus time already spent as ended early.
+   * Stopwatch: saves the run to history (if it reached a minute) and returns to zero.
+   */
   reset = () => {
     const now = this.clock()
+    if (this.view === 'stopwatch') {
+      this.finishStopwatch(now)
+      return
+    }
     this.act(reset(this.timer, this.settings, now), { entry: earlyEntry(this.timer, now) })
   }
 
   switchMode = (mode: Mode) => {
     const now = this.clock()
+    if (this.view === 'stopwatch') {
+      this.leaveStopwatch(now)
+      this.view = 'timer'
+      this.persistView()
+      this.act(switchMode(this.timer, mode, this.settings, now))
+      return
+    }
     if (mode === this.timer.mode && this.timer.status !== 'completed') return
     this.act(switchMode(this.timer, mode, this.settings, now), { entry: earlyEntry(this.timer, now) })
+  }
+
+  /** Switch to the stopwatch. A timer in progress is ended early first. */
+  switchToStopwatch = () => {
+    if (this.view === 'stopwatch') return
+    const now = this.clock()
+    const entry = earlyEntry(this.timer, now)
+    this.view = 'stopwatch'
+    this.persistView()
+    this.act(reset(this.timer, this.settings, now), { entry })
+  }
+
+  private finishStopwatch(now: number) {
+    const sw = this.stopwatch
+    const entry = swEntry(sw, now, this.timer.topic)
+    const tooShort = !entry && sw.status !== 'idle'
+    this.stopwatch = createStopwatch(now)
+    this.persistStopwatch()
+    if (entry) this.recordEntry(entry)
+    this.notice = tooShort ? 'That run was under a minute, so it was not saved.' : null
+    this.publish(now)
+  }
+
+  /** Leaving the stopwatch saves whatever it has, like pressing finish. */
+  private leaveStopwatch(now: number) {
+    const entry = swEntry(this.stopwatch, now, this.timer.topic)
+    if (entry) this.recordEntry(entry)
+    this.stopwatch = createStopwatch(now)
+    this.persistStopwatch()
+  }
+
+  private actStopwatch(next: StopwatchState) {
+    this.stopwatch = next
+    this.notice = null
+    this.persistStopwatch()
+    this.publish()
   }
 
   /** From a completed phase: start a specific next phase. */

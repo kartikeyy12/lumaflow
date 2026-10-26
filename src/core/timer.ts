@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   volume: 0.25,
   notifications: false,
   dailyGoalMin: 0,
+  scene: 'ribbon',
+  noiseVolume: 0.3,
 }
 
 export const LIMITS = {

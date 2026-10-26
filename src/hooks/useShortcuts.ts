@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
-import type { Mode } from '../core/types'
+import type { Tab } from '../components/ModeTabs'
 
 export interface ShortcutHandlers {
   toggle: () => void
   reset: () => void
-  mode: (mode: Mode) => void
+  mode: (tab: Tab) => void
+  scene: () => void
+  noise: () => void
   fullscreen: () => void
   help: () => void
   cancel: () => void
@@ -23,7 +25,7 @@ function activatesOnSpace(el: EventTarget | null): boolean {
   return el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'SUMMARY' || el.getAttribute('role') === 'button'
 }
 
-const MODE_KEYS: Record<string, Mode> = { '1': 'focus', '2': 'short', '3': 'long' }
+const MODE_KEYS: Record<string, Tab> = { '1': 'focus', '2': 'short', '3': 'long', '4': 'stopwatch' }
 
 /**
  * Global shortcuts. They never fire while typing in a field, while a dialog
@@ -57,6 +59,8 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       if (key === 'r') h.reset()
       else if (key in MODE_KEYS) h.mode(MODE_KEYS[key])
       else if (key === 'f') h.fullscreen()
+      else if (key === 'b') h.scene()
+      else if (key === 'm') h.noise()
       else if (e.key === '?') h.help()
       else return
       e.preventDefault()

@@ -1,10 +1,12 @@
 import { DEFAULT_SETTINGS, LIMITS, clamp } from './timer'
-import type { LogEntry, Mode, Outcome, Settings, Status, TimerState } from './types'
+import type { LogEntry, Mode, Outcome, SceneId, Settings, Status, StopwatchState, TimerState, View } from './types'
 
 export const KEYS = {
   settings: 'lumaflow.v1.settings',
   timer: 'lumaflow.v1.timer',
   log: 'lumaflow.v1.log',
+  stopwatch: 'lumaflow.v1.stopwatch',
+  view: 'lumaflow.v1.view',
 } as const
 
 export interface StorageLike {
@@ -48,6 +50,8 @@ const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.i
 const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
 const str = (v: unknown, fallback: string, max = 300) => (typeof v === 'string' ? v.slice(0, max) : fallback)
 
+export const SCENE_IDS: SceneId[] = ['ribbon', 'nebula', 'aurora', 'ripples', 'drift', 'still']
+
 export function sanitizeSettings(raw: unknown): Settings {
   const d = DEFAULT_SETTINGS
   const r = isObj(raw) ? raw : {}
@@ -61,6 +65,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     volume: clamp(num(r.volume, d.volume), 0, 1),
     notifications: bool(r.notifications, d.notifications),
     dailyGoalMin: Math.round(clamp(num(r.dailyGoalMin, d.dailyGoalMin), ...LIMITS.dailyGoalMin)),
+    scene: SCENE_IDS.includes(r.scene as SceneId) ? (r.scene as SceneId) : d.scene,
+    noiseVolume: clamp(num(r.noiseVolume, d.noiseVolume), 0, 1),
   }
 }
 
@@ -114,10 +120,31 @@ export function sanitizeLog(raw: unknown): LogEntry[] {
       outcome: item.outcome as Outcome,
       topic: str(item.topic, ''),
       ...(item.away === true ? { away: true } : {}),
+      ...(item.stopwatch === true ? { stopwatch: true } : {}),
       ...(typeof item.reviewNext === 'string' && item.reviewNext ? { reviewNext: str(item.reviewNext, '') } : {}),
     })
   }
   return out.sort((a, b) => b.endedAt - a.endedAt).slice(0, 1000)
+}
+
+export function sanitizeStopwatch(raw: unknown): StopwatchState | null {
+  if (!isObj(raw)) return null
+  const status = raw.status
+  if (status !== 'idle' && status !== 'running' && status !== 'paused') return null
+  if (typeof raw.runId !== 'string' || raw.runId.length === 0) return null
+  const startedAt = typeof raw.startedAt === 'number' && Number.isFinite(raw.startedAt) ? raw.startedAt : null
+  if (status === 'running' && startedAt === null) return null
+  return {
+    status,
+    runId: raw.runId.slice(0, 80),
+    startedAt: status === 'running' ? startedAt : null,
+    elapsedMs: Math.max(0, num(raw.elapsedMs, 0)),
+    lastSeenAt: num(raw.lastSeenAt, Date.now()),
+  }
+}
+
+export function sanitizeView(raw: unknown): View {
+  return raw === 'stopwatch' ? 'stopwatch' : 'timer'
 }
 
 export function loadSettings(storage: StorageLike): Settings {
@@ -139,4 +166,11 @@ export function save(storage: StorageLike, key: string, value: unknown): string 
   } catch {
     return null
   }
+}
+
+export function loadStopwatch(storage: StorageLike): StopwatchState | null {
+  return sanitizeStopwatch(readJson(storage, KEYS.stopwatch))
+}
+export function loadView(storage: StorageLike): View {
+  return sanitizeView(readJson(storage, KEYS.view))
 }

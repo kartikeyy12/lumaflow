@@ -1,30 +1,10 @@
-let ctx: AudioContext | null = null
+import { getAudioContext, resumeAudio } from './audio'
 
-function getContext(): AudioContext | null {
-  if (ctx) return ctx
-  const Ctor =
-    window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!Ctor) return null
-  try {
-    ctx = new Ctor()
-  } catch {
-    ctx = null
-  }
-  return ctx
-}
-
-/**
- * Browsers only allow audio after a user gesture. Call this from a click or
- * key handler (starting the timer) so the chime can play later on its own.
- */
-export function unlockAudio() {
-  const c = getContext()
-  if (c && c.state === 'suspended') void c.resume().catch(() => {})
-}
+export { unlockAudio } from './audio'
 
 /** A soft two-note chime. Short, low volume, no sharp attack. */
 export function playChime(volume: number) {
-  const c = getContext()
+  const c = getAudioContext()
   if (!c || c.state !== 'running') return
   const vol = Math.min(1, Math.max(0, volume)) * 0.35
   if (vol <= 0) return
@@ -50,12 +30,5 @@ export function playChime(volume: number) {
 
 /** Plays the chime from a user gesture, waiting for the audio context to wake. */
 export async function previewChime(volume: number) {
-  const c = getContext()
-  if (!c) return
-  try {
-    if (c.state === 'suspended') await c.resume()
-  } catch {
-    return
-  }
-  playChime(volume)
+  if (await resumeAudio()) playChime(volume)
 }

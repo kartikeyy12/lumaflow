@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { MODE_LABEL } from '../core/format'
 import { durationFor, nextMode } from '../core/timer'
-import type { LogEntry, Mode, Settings, TimerState } from '../core/types'
-import { IconPause, IconPlay, IconReset } from './icons'
+import type { LogEntry, Mode, Settings, StopwatchState, TimerState, View } from '../core/types'
+import { IconCheck, IconPause, IconPlay, IconReset } from './icons'
 
 interface Props {
+  view: View
+  stopwatch: StopwatchState
   timer: TimerState
   settings: Settings
   /** Log entry recorded for the phase that just completed, if any. */
@@ -19,6 +21,29 @@ interface Props {
 
 export function Controls(props: Props) {
   const { timer, settings, entry, confirmingReset } = props
+
+  if (props.view === 'stopwatch') {
+    const sw = props.stopwatch
+    const running = sw.status === 'running'
+    return (
+      <div className="controls">
+        <button type="button" className="btn btn-primary btn-main" onClick={props.onToggle} aria-keyshortcuts="Space">
+          {running ? <IconPause /> : <IconPlay />}
+          <span>{running ? 'Pause' : sw.status === 'paused' ? 'Resume' : 'Start'}</span>
+        </button>
+        <button
+          type="button"
+          className={`btn${confirmingReset ? ' btn-warn' : ''}`}
+          onClick={props.onReset}
+          aria-keyshortcuts="R"
+          disabled={sw.status === 'idle'}
+        >
+          <IconCheck />
+          <span>{confirmingReset ? 'Confirm finish' : 'Finish'}</span>
+        </button>
+      </div>
+    )
+  }
 
   if (timer.status === 'completed') {
     const next = nextMode(timer, settings)

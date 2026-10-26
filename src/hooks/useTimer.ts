@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { TimerController } from '../core/controller'
-import { MODE_LABEL, formatClock } from '../core/format'
+import { MODE_LABEL, formatClock, formatElapsed } from '../core/format'
 import { getBrowserStorage } from '../core/storage'
+import { swElapsed } from '../core/stopwatch'
 import { getRemaining } from '../core/timer'
 import { playChime } from '../feedback/chime'
 import { notifyCompleted } from '../feedback/notify'
@@ -22,15 +23,22 @@ export function useTimer(controller: TimerController) {
   useEffect(() => controller.attach(), [controller])
 
   // Keep the tab title useful when the window is in the background.
-  const { timer, now } = snap
+  const { timer, stopwatch, view, now } = snap
   const remaining = getRemaining(timer, now)
+  const elapsed = swElapsed(stopwatch, now)
   useEffect(() => {
+    if (view === 'stopwatch') {
+      if (stopwatch.status === 'running') document.title = `${formatElapsed(elapsed)} · Stopwatch · LumaFlow`
+      else if (stopwatch.status === 'paused') document.title = `Paused ${formatElapsed(elapsed)} · LumaFlow`
+      else document.title = 'LumaFlow'
+      return
+    }
     const label = MODE_LABEL[timer.mode]
     if (timer.status === 'running') document.title = `${formatClock(remaining)} · ${label} · LumaFlow`
     else if (timer.status === 'paused') document.title = `Paused ${formatClock(remaining)} · LumaFlow`
     else if (timer.status === 'completed') document.title = `${label} complete · LumaFlow`
     else document.title = 'LumaFlow'
-  }, [timer.status, timer.mode, remaining])
+  }, [view, stopwatch.status, timer.status, timer.mode, remaining, elapsed])
 
-  return useMemo(() => ({ ...snap, remaining }), [snap, remaining])
+  return useMemo(() => ({ ...snap, remaining, elapsed }), [snap, remaining, elapsed])
 }

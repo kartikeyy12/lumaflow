@@ -2,10 +2,13 @@ import { Modal } from './Modal'
 
 export const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: 'Space', action: 'Start, pause or resume' },
-  { keys: 'R', action: 'Reset (press twice when a session is under way)' },
+  { keys: 'R', action: 'Reset, or finish the stopwatch (press twice mid-session)' },
   { keys: '1', action: 'Focus' },
   { keys: '2', action: 'Short break' },
   { keys: '3', action: 'Long break' },
+  { keys: '4', action: 'Stopwatch' },
+  { keys: 'B', action: 'Next background' },
+  { keys: 'M', action: 'Brown noise on or off' },
   { keys: 'F', action: 'Toggle full screen' },
   { keys: '?', action: 'Show this list' },
   { keys: 'Esc', action: 'Cancel a pending reset or close a panel' },

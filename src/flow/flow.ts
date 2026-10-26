@@ -44,8 +44,9 @@ const STRANDS = 7
 const POINTS = 96
 
 /**
- * Draws one frame. `t` is accumulated "ribbon time", so changing speed never
- * makes the shape jump. `pulse` is 0..1 and adds a single soft swell.
+ * Draws one ribbon frame. The caller clears the canvas. `t` is accumulated
+ * "flow time", so changing speed never makes the shape jump. `pulse` runs 0 to 1
+ * once when a session completes and adds a single soft swell.
  */
 export function drawFlow(
   ctx: CanvasRenderingContext2D,
@@ -55,7 +56,6 @@ export function drawFlow(
   p: FlowParams,
   pulse = 0,
 ) {
-  ctx.clearRect(0, 0, w, h)
   const swell = Math.sin(Math.PI * pulse)
   const glow = p.glow + swell * 0.22
   const spread = p.spread + swell * 0.12

@@ -4,6 +4,11 @@ export type Status = 'idle' | 'running' | 'paused' | 'completed'
 
 export type Outcome = 'completed' | 'early'
 
+export type SceneId = 'ribbon' | 'nebula' | 'aurora' | 'ripples' | 'drift' | 'still'
+
+/** Which tool is on screen. Only one of them is ever active. */
+export type View = 'timer' | 'stopwatch'
+
 export interface Settings {
   focusMin: number
   shortMin: number
@@ -18,6 +23,10 @@ export interface Settings {
   notifications: boolean
   /** Daily focus goal in minutes. 0 means no goal. */
   dailyGoalMin: number
+  /** Animated background. */
+  scene: SceneId
+  /** Brown noise level, 0 to 1. The noise itself never starts on its own. */
+  noiseVolume: number
 }
 
 export interface TimerState {
@@ -57,6 +66,8 @@ export interface LogEntry {
   away?: boolean
   /** Optional note on what to review next, added after the session. */
   reviewNext?: string
+  /** Recorded with the stopwatch rather than a countdown. */
+  stopwatch?: boolean
 }
 
 export type TimerEvent =
@@ -69,3 +80,15 @@ export type TimerEvent =
       silent: boolean
       entry: LogEntry | null
     }
+
+export interface StopwatchState {
+  status: 'idle' | 'running' | 'paused'
+  /** Unique per run. Doubles as the history entry id. */
+  runId: string
+  /** While running: the moment the clock reads zero. Elapsed is now minus this. */
+  startedAt: number | null
+  /** Elapsed time while idle or paused. */
+  elapsedMs: number
+  /** Last time the app was known to be alive (heartbeat). */
+  lastSeenAt: number
+}
