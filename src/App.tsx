@@ -15,14 +15,15 @@ import {
   IconScene,
   IconSettings,
   IconSound,
-  IconTasks,
+  IconTodo,
 } from './components/icons'
 import { LogDialog } from './components/LogDialog'
 import { ModeTabs, type Tab } from './components/ModeTabs'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { StatsDock } from './components/StatsDock'
-import { TasksDialog } from './components/TasksDialog'
+import { TodoDialog } from './components/TodoDialog'
+import { TodoList } from './components/TodoList'
 import { TimerDial } from './components/TimerDial'
 import type { FlowState } from './flow/flow'
 import { SCENE_BY_ID, nextScene } from './flow/scenes'
@@ -30,6 +31,7 @@ import { unlockAudio } from './feedback/chime'
 import { ambientKind, setAmbientVolume, startAmbient, stopAmbient } from './feedback/ambient'
 import { useReducedMotion } from './hooks/useReducedMotion'
 import { useShortcuts } from './hooks/useShortcuts'
+import { useMedia } from './hooks/useMedia'
 import { useTasks } from './hooks/useTasks'
 import { useTimer } from './hooks/useTimer'
 
@@ -37,12 +39,16 @@ type Pending = { kind: 'reset' } | { kind: 'tab'; tab: Tab } | null
 type Panel = 'settings' | 'log' | 'help' | 'tasks' | null
 
 const CONFIRM_MS = 4000
+/** Wide enough to keep the to-do list beside the timer without crowding it. */
+const WIDE_QUERY = '(min-width: 1180px)'
 const HOUR_MS = 3_600_000
 const TAB_KEY: Record<Tab, string> = { focus: '1', short: '2', long: '3', stopwatch: '4' }
 const TAB_LABEL: Record<Tab, string> = { ...MODE_LABEL, stopwatch: 'Stopwatch' }
 
 export default function App({ controller, taskStore }: { controller: TimerController; taskStore: TaskStore }) {
   const tasks = useTasks(taskStore)
+  const wide = useMedia(WIDE_QUERY)
+  const [todoFocus, setTodoFocus] = useState(0)
   const { timer, stopwatch, view, settings, log, now, notice, remaining, elapsed } = useTimer(controller)
   const reduced = useReducedMotion()
   const [panel, setPanel] = useState<Panel>(null)
@@ -177,13 +183,45 @@ export default function App({ controller, taskStore }: { controller: TimerContro
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
+  const todoShown = wide && settings.todoOpen
+  // On wide screens the list lives beside the timer and this shows or hides it. On narrow ones it opens a dialog.
+  const openTodo = useCallback(
+    (focusOnly = false) => {
+      if (!wide) {
+        setPanel('tasks')
+        return
+      }
+      if (!focusOnly && settings.todoOpen) controller.updateSettings({ todoOpen: false })
+      else {
+        if (!settings.todoOpen) controller.updateSettings({ todoOpen: true })
+        setTodoFocus((n) => n + 1)
+      }
+    },
+    [wide, settings.todoOpen, controller],
+  )
+  useEffect(() => {
+    if (todoFocus === 0) return
+    const id = window.setTimeout(() => document.getElementById('todo-input')?.focus(), 0)
+    return () => window.clearTimeout(id)
+  }, [todoFocus])
+  const todoHandlers = {
+    onAdd: taskStore.add,
+    onToggle: taskStore.toggle,
+    onRemove: taskStore.remove,
+    onClearDone: taskStore.clearDone,
+    onFocusOn: (text: string) => {
+      controller.setTopic(text)
+      setPanel(null)
+    },
+  }
+
   useShortcuts({
     toggle,
     reset: requestReset,
     mode: requestTab,
     scene: cycleScene,
     noise: toggleSound,
-    tasks: () => setPanel('tasks'),
+    tasks: () => openTodo(true),
     fullscreen: toggleFullscreen,
     help: () => setPanel('help'),
     cancel: () => setPending(null),
@@ -292,12 +330,13 @@ export default function App({ controller, taskStore }: { controller: TimerContro
           <button
             type="button"
             className="icon-btn icon-btn-count"
-            onClick={() => setPanel('tasks')}
-            aria-label={openCount(tasks) > 0 ? `Tasks, ${openCount(tasks)} to do` : 'Tasks'}
+            onClick={() => openTodo()}
+            aria-label={openCount(tasks) > 0 ? `To-do, ${openCount(tasks)} left` : 'To-do'}
+            aria-pressed={wide ? todoShown : undefined}
             aria-keyshortcuts="T"
-            title="Tasks (T)"
+            title="To-do list (T)"
           >
-            <IconTasks />
+            <IconTodo />
             {openCount(tasks) > 0 && (
               <span className="count-dot" aria-hidden="true">
                 {Math.min(openCount(tasks), 99)}
@@ -387,6 +426,18 @@ export default function App({ controller, taskStore }: { controller: TimerContro
         onOpenGoal={() => setPanel('settings')}
       />
 
+      {todoShown && (
+        <aside className={`todo-panel${sessionActive ? ' todo-quiet' : ''}`} aria-labelledby="todo-title" data-testid="todo-panel">
+          <div className="todo-head">
+            <h2 id="todo-title">To-do</h2>
+            <button type="button" className="icon-btn icon-btn-sm" onClick={() => controller.updateSettings({ todoOpen: false })} aria-label="Hide the to-do list">
+              <IconClose />
+            </button>
+          </div>
+          <TodoList tasks={tasks} inputId="todo-input" {...todoHandlers} />
+        </aside>
+      )}
+
       <div className="sr-only" role="status" aria-live="polite">
         {announce}
       </div>
@@ -407,19 +458,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
         onDelete={controller.deleteEntry}
         onClear={controller.clearLog}
       />
-      <TasksDialog
-        open={panel === 'tasks'}
-        onClose={() => setPanel(null)}
-        tasks={tasks}
-        onAdd={taskStore.add}
-        onToggle={taskStore.toggle}
-        onRemove={taskStore.remove}
-        onClearDone={taskStore.clearDone}
-        onFocusOn={(text) => {
-          controller.setTopic(text)
-          setPanel(null)
-        }}
-      />
+      <TodoDialog open={panel === 'tasks'} onClose={() => setPanel(null)} tasks={tasks} {...todoHandlers} />
       <ShortcutsDialog open={panel === 'help'} onClose={() => setPanel(null)} />
     </div>
   )

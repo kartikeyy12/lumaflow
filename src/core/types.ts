@@ -31,6 +31,8 @@ export interface Settings {
   ambient: AmbientId
   /** Start the ambient sound with each focus session or stopwatch run, and fade it out when that ends. */
   ambientAuto: boolean
+  /** Show the to-do list beside the timer on wide screens. */
+  todoOpen: boolean
   /** Ambient sound level, 0 to 1. */
   noiseVolume: number
 }

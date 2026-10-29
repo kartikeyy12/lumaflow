@@ -91,3 +91,14 @@ describe('sound and background settings', () => {
     expect(loadSettings(s).ambientAuto).toBe(false)
   })
 })
+
+describe('to-do list setting', () => {
+  it('is shown by default, and a deliberate hide is kept', () => {
+    expect(DEFAULT_SETTINGS.todoOpen).toBe(true)
+    const s = memoryStorage()
+    save(s, KEYS.settings, { todoOpen: false })
+    expect(loadSettings(s).todoOpen).toBe(false)
+    save(s, KEYS.settings, { todoOpen: 'no' })
+    expect(loadSettings(s).todoOpen).toBe(true)
+  })
+})

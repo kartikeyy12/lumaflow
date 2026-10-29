@@ -45,7 +45,7 @@ test.describe('timer', () => {
 
   test('completes, shows the completion state, and records exactly one session', async ({ page }) => {
     await open(page)
-    await page.getByRole('textbox').fill('Laplace transforms')
+    await page.getByRole('textbox', { name: 'Studying' }).fill('Laplace transforms')
     await page.getByRole('button', { name: 'Start' }).click()
     await live(page, 25 * MIN + 5000)
     await expect(page.getByText('Complete', { exact: true })).toBeVisible()
@@ -104,7 +104,7 @@ test.describe('timer', () => {
 
   test('shortcuts are ignored while typing in a field', async ({ page }) => {
     await open(page)
-    const topic = page.getByRole('textbox')
+    const topic = page.getByRole('textbox', { name: 'Studying' })
     await topic.click()
     await page.keyboard.type('r 1 2 3 space')
     await expect(topic).toHaveValue('r 1 2 3 space')
@@ -117,14 +117,14 @@ test.describe('timer', () => {
 test.describe('persistence and recovery', () => {
   test('a reload keeps a running session and does not make noise or show a completion', async ({ page }) => {
     await open(page)
-    await page.getByRole('textbox').fill('Op-amp filters')
+    await page.getByRole('textbox', { name: 'Studying' }).fill('Op-amp filters')
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: 'Start' }).click()
     await live(page, 10 * MIN)
     await page.reload()
     await expect(clock(page)).toHaveAccessibleName(/^(14 minutes( \d+ seconds)?|15 minutes) remaining$/)
     await expect(page.getByText(/welcome back/i)).toBeVisible()
-    await expect(page.getByRole('textbox')).toHaveValue('Op-amp filters')
+    await expect(page.getByRole('textbox', { name: 'Studying' })).toHaveValue('Op-amp filters')
   })
 
   test('a reload after the end shows completed and records once', async ({ page }) => {

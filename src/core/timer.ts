@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scene: 'ribbon',
   ambient: 'storm',
   ambientAuto: true,
+  todoOpen: true,
   noiseVolume: 0.3,
 }
 

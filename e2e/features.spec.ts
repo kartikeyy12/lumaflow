@@ -27,7 +27,7 @@ test.describe('stopwatch', () => {
 
   test('counts up, pauses, resumes, and saves one entry on finish', async ({ page }) => {
     await open(page)
-    await page.getByRole('textbox').fill('Thermodynamics')
+    await page.getByRole('textbox', { name: 'Studying' }).fill('Thermodynamics')
     await page.getByRole('button', { name: 'Stopwatch' }).click()
     await expect(clock(page)).toHaveAccessibleName('0 seconds elapsed')
     await page.getByRole('button', { name: 'Start' }).click()
@@ -343,77 +343,127 @@ test.describe('background sound', () => {
   })
 })
 
-test.describe('tasks', () => {
+test.describe('to-do list', () => {
   test.use({ reducedMotion: 'reduce' })
+  const panel = (page: Page) => page.getByTestId('todo-panel')
+  const input = (page: Page) => page.getByLabel('New to-do')
   const add = async (page: Page, text: string) => {
-    await page.getByLabel('New task').fill(text)
+    await input(page).fill(text)
     await page.keyboard.press('Enter')
   }
 
-  test('T opens an empty list with a hint, and Esc closes it', async ({ page }) => {
+  test('is on the main screen, with an empty hint', async ({ page }) => {
     await page.goto('/')
     await ready(page)
-    await page.keyboard.press('t')
-    await expect(page.getByRole('dialog', { name: 'Tasks' })).toBeVisible()
-    await expect(page.getByText(/Nothing here yet/)).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(panel(page)).toBeVisible()
+    await expect(panel(page).getByRole('heading', { name: 'To-do' })).toBeVisible()
+    await expect(panel(page).getByText(/Nothing on your list yet/)).toBeVisible()
   })
 
-  test('adding, ticking off, deleting and clearing', async ({ page }) => {
+  test('add, tick off, delete and clear', async ({ page }) => {
     await page.goto('/')
     await ready(page)
-    await page.getByRole('button', { name: 'Tasks' }).click()
+    await input(page).click()
     await add(page, 'Revise Laplace transforms')
     await add(page, 'Past paper 2023')
     await add(page, '   ')
-    const list = page.getByTestId('tasks')
-    await expect(list.locator('li')).toHaveCount(2)
-    await expect(page.getByText('2 to do')).toBeVisible()
+    const items = page.getByTestId('todo-items').locator('li')
+    await expect(items).toHaveCount(2)
+    await expect(panel(page).getByText('2 left')).toBeVisible()
     await page.getByRole('checkbox', { name: 'Revise Laplace transforms' }).check()
-    await expect(page.getByText('1 to do, 1 done')).toBeVisible()
-    await expect(list.locator('li').last()).toContainText('Revise Laplace transforms')
+    await expect(panel(page).getByText('1 left, 1 done')).toBeVisible()
+    await expect(items.last()).toContainText('Revise Laplace transforms')
     await page.getByRole('button', { name: 'Clear done' }).click()
-    await expect(list.locator('li')).toHaveCount(1)
+    await expect(items).toHaveCount(1)
     await page.getByRole('button', { name: 'Delete Past paper 2023' }).click()
-    await expect(page.getByText(/Nothing here yet/)).toBeVisible()
+    await expect(panel(page).getByText(/Nothing on your list yet/)).toBeVisible()
   })
 
-  test('the button shows how many are left and the list survives a reload', async ({ page }) => {
+  test('the list survives a reload, and the button counts what is left', async ({ page }) => {
     await page.goto('/')
     await ready(page)
-    await page.keyboard.press('t')
     await add(page, 'One')
     await add(page, 'Two')
-    await page.keyboard.press('Escape')
-    await expect(page.getByRole('button', { name: 'Tasks, 2 to do' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'To-do, 2 left' })).toBeVisible()
     await page.reload()
-    await expect(page.getByRole('button', { name: 'Tasks, 2 to do' })).toBeVisible()
-    await page.keyboard.press('t')
-    await expect(page.getByTestId('tasks').locator('li')).toHaveCount(2)
+    await expect(page.getByTestId('todo-items').locator('li')).toHaveCount(2)
+    await expect(page.getByRole('button', { name: 'To-do, 2 left' })).toBeVisible()
   })
 
-  test('"Study this" puts the task in the Studying field', async ({ page }) => {
+  test('T jumps to the input, and typing there does not trigger shortcuts', async ({ page }) => {
     await page.goto('/')
     await ready(page)
     await page.keyboard.press('t')
+    await expect(input(page)).toBeFocused()
+    await page.keyboard.type('m r b 4 t')
+    await expect(input(page)).toHaveValue('m r b 4 t')
+    await expect(page.locator('.app')).toHaveAttribute('data-scene', 'ribbon')
+    await page.keyboard.press('Escape')
+    await expect(input(page)).not.toBeFocused()
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Running', { exact: true })).toBeVisible()
+  })
+
+  test('it can be hidden and brought back, and the choice is remembered', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.getByRole('button', { name: 'Hide the to-do list' }).click()
+    await expect(panel(page)).toHaveCount(0)
+    await page.reload()
+    await expect(panel(page)).toHaveCount(0)
+    await page.getByRole('button', { name: /^To-do/ }).click()
+    await expect(panel(page)).toBeVisible()
+    await expect(input(page)).toBeFocused()
+  })
+
+  test('"Study" puts the item in the Studying field', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
     await add(page, 'Z-transform problems')
     await page.getByRole('button', { name: 'Study this: Z-transform problems' }).click()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByRole('textbox', { name: 'Studying' })).toHaveValue('Z-transform problems')
   })
 
-  test('typing in the task field does not trigger shortcuts', async ({ page }) => {
+  test('after ticking an item with the mouse, Space still starts the timer', async ({ page }) => {
     await page.goto('/')
     await ready(page)
-    await page.keyboard.press('t')
-    await page.getByLabel('New task').fill('')
-    await page.keyboard.type('m r b 4 t')
-    await expect(page.getByLabel('New task')).toHaveValue('m r b 4 t')
-    await expect(page.locator('.app')).toHaveAttribute('data-scene', 'ribbon')
+    await add(page, 'Read chapter 4')
+    await page.keyboard.press('Escape')
+    await page.getByRole('checkbox', { name: 'Read chapter 4' }).click()
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Running', { exact: true })).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Read chapter 4' })).toBeChecked()
   })
 
-  test('a very long task wraps instead of overflowing', async ({ browser }) => {
+  test('it fades back while a session runs and returns when you point at it', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await expect(panel(page)).not.toHaveClass(/todo-quiet/)
+    await page.keyboard.press('Space')
+    await expect(panel(page)).toHaveClass(/todo-quiet/)
+    await page.keyboard.press('Space')
+    await expect(panel(page)).not.toHaveClass(/todo-quiet/)
+  })
+
+  test('on a narrow window it opens as a dialog instead', async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: 'reduce' })
+    const page = await ctx.newPage()
+    await page.goto('/')
+    await ready(page)
+    await expect(panel(page)).toHaveCount(0)
+    await page.keyboard.press('t')
+    const dialog = page.getByRole('dialog', { name: 'To-do' })
+    await expect(dialog).toBeVisible()
+    await expect(input(page)).toBeFocused()
+    await add(page, 'Lab report')
+    await expect(dialog.getByTestId('todo-items').locator('li')).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'To-do, 1 left' })).toBeVisible()
+    await ctx.close()
+  })
+
+  test('long items wrap instead of overflowing, on a phone', async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width: 360, height: 640 }, reducedMotion: 'reduce' })
     const page = await ctx.newPage()
     await page.goto('/')
@@ -427,6 +477,20 @@ test.describe('tasks', () => {
     })
     expect(overflow).toBeLessThanOrEqual(0)
     await ctx.close()
+  })
+
+  test('on a wide screen the list does not overlap the timer', async ({ browser }) => {
+    for (const vp of [{ width: 1180, height: 700 }, { width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+      const ctx = await browser.newContext({ viewport: vp, reducedMotion: 'reduce' })
+      const page = await ctx.newPage()
+      await page.goto('/')
+      await ready(page)
+      const tabs = await page.getByRole('group', { name: 'Mode' }).boundingBox()
+      const box = await panel(page).boundingBox()
+      expect(tabs && box && tabs.x + tabs.width <= box.x, `${vp.width}x${vp.height}`).toBe(true)
+      expect(box && box.y + box.height <= vp.height - 40, `${vp.width}x${vp.height} bottom`).toBe(true)
+      await ctx.close()
+    }
   })
 })
 

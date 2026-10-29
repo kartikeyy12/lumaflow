@@ -13,7 +13,7 @@ A minimal, ambient study timer for focused work, deliberate breaks and consisten
 - **Stopwatch.** For open-ended work with no target. It counts up, pauses and resumes, and saves a history entry when you finish. Runs under a minute are not saved. If the device sleeps or the tab is closed while it runs, it pauses at the last moment the app was alive, so time away is never counted as study time.
 - **Six backgrounds**, chosen in Settings or cycled with `B`: Ribbon (the original), Nebula (a dense starfield over muted indigo clouds), Aurora, Ripples, Drift (warm dust in lamplight) and Still (no motion). Each one slows to a stop when you pause, and none of them speeds up or brightens as time runs out.
 - **Background sound:** a thunderstorm (rain with distant thunder), plain rain, or brown noise. By default the storm starts with each focus session or stopwatch run and fades out when you pause or finish. Breaks stay quiet. `M` mutes it for the rest of that session, and you can turn the auto start off in Settings. Everything is generated in the browser, so there are no audio files to load.
-- **Tasks.** A short list you open with the checklist button or `T`. Add, tick off, delete, and clear what is done. "Study this" copies a task into the Studying field. It stays out of the way: the main screen only shows how many are left. Up to 100 tasks, saved in your browser.
+- **To-do list** beside the timer on wide screens. Type an item and press Enter, tick items off, delete them, and clear what is done. "Study" copies an item into the Studying field. It fades back while a session runs and returns when you point at it. Hide it with the close button if you want a bare screen. On narrow windows and phones it opens as a dialog from the checklist button. Up to 100 items, saved in your browser.
 - **Session tracking.** Completed sessions and total focus time for today, plus an optional daily goal shown as a quiet progress bar.
 - **Session notes.** Write what you are studying before you start, and add an optional "review next" note when a session ends.
 - **History.** Date, time, duration, topic and whether each session finished or ended early. Delete single entries or clear everything (with confirmation).
@@ -34,9 +34,9 @@ A minimal, ambient study timer for focused work, deliberate breaks and consisten
 | --- | --- |
 | ![Stopwatch](docs/screenshots/stopwatch.png) | ![Complete](docs/screenshots/complete.png) |
 
-| Tasks | Settings |
+| To-do list | Settings |
 | --- | --- |
-| ![Tasks](docs/screenshots/tasks.png) | ![Settings](docs/screenshots/settings.png) |
+| ![To-do list](docs/screenshots/todo.png) | ![Settings](docs/screenshots/settings.png) |
 
 ![History](docs/screenshots/history.png)
 
@@ -87,7 +87,7 @@ To use the built app, serve `dist/` with any static file server (`npm run previe
 | `4` | Stopwatch |
 | `B` | Next background |
 | `M` | Background sound on or off |
-| `T` | Open your tasks |
+| `T` | Jump to the to-do list and start typing |
 | `F` | Toggle full screen |
 | `?` | Show the shortcut list |
 | `Esc` | Cancel a pending reset, or close a panel |
@@ -107,7 +107,7 @@ Shortcuts are ignored while you type in a field or while a dialog is open. When 
 
 ## Data and privacy
 
-Everything stays in your browser's `localStorage` under keys starting with `lumaflow.v1.`: settings (including your background and sound), the current timer and stopwatch state, your tasks, and up to 1000 history entries. Nothing is sent anywhere. Clear it from the History panel, or by clearing site data in your browser. If `localStorage` is unavailable (some private modes), the app still works for the current page but cannot remember anything.
+Everything stays in your browser's `localStorage` under keys starting with `lumaflow.v1.`: settings (including your background and sound), the current timer and stopwatch state, your to-do list, and up to 1000 history entries. Nothing is sent anywhere. Clear it from the History panel, or by clearing site data in your browser. If `localStorage` is unavailable (some private modes), the app still works for the current page but cannot remember anything.
 
 ## Known limitations
 
@@ -132,7 +132,7 @@ src/
                stopwatch.ts (count-up state, away handling), tasks.ts and taskStore.ts (to-do list)
   flow/        Background engine: flow.ts (ribbon maths), scene.ts (shared interface),
                scenes/ (ribbon, nebula, aurora, ripples, drift, still)
-  components/  TimerDial, ModeTabs, Controls, StatsDock, TasksDialog, other dialogs, FlowCanvas
+  components/  TimerDial, ModeTabs, Controls, StatsDock, TodoList, TodoDialog, other dialogs, FlowCanvas
   hooks/       useTimer, useTasks, useShortcuts, useReducedMotion
   feedback/    chime.ts, ambient.ts (rain, storm, brown noise), ambientData.ts (sample generators),
                audio.ts (shared context), notify.ts (Notifications API)

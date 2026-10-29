@@ -9,7 +9,7 @@ export const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: '4', action: 'Stopwatch' },
   { keys: 'B', action: 'Next background' },
   { keys: 'M', action: 'Background sound on or off' },
-  { keys: 'T', action: 'Open your tasks' },
+  { keys: 'T', action: 'To-do list: open it and start typing' },
   { keys: 'F', action: 'Toggle full screen' },
   { keys: '?', action: 'Show this list' },
   { keys: 'Esc', action: 'Cancel a pending reset or close a panel' },

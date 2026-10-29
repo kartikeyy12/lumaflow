@@ -70,6 +70,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     scene: SCENE_IDS.includes(r.scene as SceneId) ? (r.scene as SceneId) : d.scene,
     ambient: AMBIENT_IDS.includes(r.ambient as AmbientId) ? (r.ambient as AmbientId) : d.ambient,
     ambientAuto: bool(r.ambientAuto, d.ambientAuto),
+    todoOpen: bool(r.todoOpen, d.todoOpen),
     noiseVolume: clamp(num(r.noiseVolume, d.noiseVolume), 0, 1),
   }
 }
