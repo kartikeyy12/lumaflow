@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { LIMITS, MAX_AUTO_CHAIN } from '../core/timer'
 import type { Settings, TimerState } from '../core/types'
+import { AMBIENTS } from '../feedback/ambient'
 import { previewChime } from '../feedback/chime'
 import { notificationPermission, requestNotificationPermission } from '../feedback/notify'
 import { SCENES } from '../flow/scenes'
@@ -131,8 +132,29 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
         )}
       </section>
 
-      <section className="set-group" aria-labelledby="set-noise">
-        <h3 id="set-noise">Brown noise</h3>
+      <section className="set-group" aria-labelledby="set-sound">
+        <h3 id="set-sound">Background sound</h3>
+        <div className="sounds" role="radiogroup" aria-labelledby="set-sound">
+          {AMBIENTS.map((a) => (
+            <label key={a.id} className="sound-opt">
+              <input
+                type="radio"
+                name="ambient"
+                value={a.id}
+                checked={settings.ambient === a.id}
+                onChange={() => onChange({ ambient: a.id })}
+              />
+              <span className="sound-name">{a.label}</span>
+              <span className="sound-note">{a.note}</span>
+            </label>
+          ))}
+        </div>
+        <Toggle
+          label="Play it while I focus"
+          hint="Starts with each focus session or stopwatch run and fades out when you pause or finish. Breaks stay quiet."
+          checked={settings.ambientAuto}
+          onChange={(v) => onChange({ ambientAuto: v })}
+        />
         <div className="volume volume-flat">
           <label htmlFor="noise-vol">Volume</label>
           <input
@@ -145,7 +167,7 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
             onChange={(e) => onChange({ noiseVolume: Number(e.target.value) })}
           />
         </div>
-        <p className="muted small">Turn it on with the speaker button or M. It always starts off.</p>
+        <p className="muted small">Press M to switch it on or off at any time.</p>
       </section>
     </Modal>
   )

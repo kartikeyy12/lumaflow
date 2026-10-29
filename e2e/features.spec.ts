@@ -115,7 +115,7 @@ test.describe('backgrounds', () => {
     await open(page)
     await expect(page.locator('.app')).toHaveAttribute('data-scene', 'ribbon')
     await page.getByRole('button', { name: 'Settings' }).click()
-    await expect(page.getByRole('radio')).toHaveCount(6)
+    await expect(page.getByRole('radiogroup', { name: 'Background', exact: true }).getByRole('radio')).toHaveCount(6)
     await page.getByRole('radio', { name: /Nebula/ }).check({ force: true })
     await expect(page.locator('.app')).toHaveAttribute('data-scene', 'nebula')
     await page.getByRole('button', { name: 'Close Settings' }).click()
@@ -206,36 +206,227 @@ test.describe('background motion', () => {
   })
 })
 
-test.describe('brown noise', () => {
+/** Counts how many sound sources the page starts and stops, so tests can tell when audio is really running. */
+async function watchAudio(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __audio: { started: number; stopped: number } }
+    w.__audio = { started: 0, stopped: 0 }
+    const proto = AudioBufferSourceNode.prototype
+    const start = proto.start
+    const stop = proto.stop
+    proto.start = function (...a: Parameters<typeof start>) {
+      w.__audio.started++
+      return start.apply(this, a)
+    }
+    proto.stop = function (...a: Parameters<typeof stop>) {
+      w.__audio.stopped++
+      return stop.apply(this, a)
+    }
+  })
+}
+const audio = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __audio: { started: number; stopped: number } }).__audio)
+const soundBtn = (page: Page) => page.getByRole('button', { name: 'Background sound' })
+
+test.describe('background sound', () => {
   test.use({ reducedMotion: 'reduce' })
 
-  test('is off at the start, and M or the button toggles it', async ({ page }) => {
-    await open(page)
-    const btn = page.getByRole('button', { name: 'Brown noise' })
-    await expect(btn).toHaveAttribute('aria-pressed', 'false')
-    await page.keyboard.press('m')
-    await expect(btn).toHaveAttribute('aria-pressed', 'true')
-    await btn.click()
-    await expect(btn).toHaveAttribute('aria-pressed', 'false')
+  test('plays with a focus session, and stops on pause', async ({ page }) => {
+    await watchAudio(page)
+    await page.goto('/')
+    await ready(page)
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    expect((await audio(page)).started).toBe(0)
+    await page.keyboard.press('Space')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+    await expect.poll(async () => (await audio(page)).started).toBeGreaterThanOrEqual(3)
+    await page.keyboard.press('Space')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    await expect.poll(async () => (await audio(page)).stopped, { timeout: 5000 }).toBeGreaterThanOrEqual(3)
   })
 
-  test('is never on after a reload, even if it was on before', async ({ page }) => {
-    await open(page)
-    await page.keyboard.press('m')
-    await expect(page.getByRole('button', { name: 'Brown noise' })).toHaveAttribute('aria-pressed', 'true')
-    await page.reload()
-    await expect(page.getByRole('button', { name: 'Brown noise' })).toHaveAttribute('aria-pressed', 'false')
+  test('breaks stay quiet', async ({ page }) => {
+    await watchAudio(page)
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('2')
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Running', { exact: true })).toBeVisible()
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    expect((await audio(page)).started).toBe(0)
   })
 
-  test('the volume setting is saved', async ({ page }) => {
-    await open(page)
+  test('the stopwatch plays it too', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('4')
+    await page.keyboard.press('Space')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('M turns it off for the rest of the session, and the next session plays again', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('m')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Paused', { exact: true })).toBeVisible()
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Running', { exact: true })).toBeVisible()
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    await page.keyboard.press('r')
+    await page.keyboard.press('Space')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('with auto play off, nothing plays until you ask', async ({ page }) => {
+    await watchAudio(page)
+    await page.addInitScript(() => localStorage.setItem('lumaflow.v1.settings', JSON.stringify({ ambientAuto: false })))
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Running', { exact: true })).toBeVisible()
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    expect((await audio(page)).started).toBe(0)
+    await soundBtn(page).click()
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+    await expect.poll(async () => (await audio(page)).started).toBeGreaterThanOrEqual(3)
+    await soundBtn(page).click()
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  test('each sound in the picker is used', async ({ page }) => {
+    for (const [name, layers] of [['^Brown noise', 1], ['^Rain', 3], ['^Thunderstorm', 3]] as const) {
+      const ctx = await page.context().browser()!.newContext({ reducedMotion: 'reduce' })
+      const p = await ctx.newPage()
+      await watchAudio(p)
+      await p.goto('/')
+      await ready(p)
+      await p.getByRole('button', { name: 'Settings' }).click()
+      await p.getByRole('radio', { name: new RegExp(name) }).check({ force: true })
+      await p.getByRole('button', { name: 'Close Settings' }).click()
+      await p.getByRole('button', { name: 'Start' }).click()
+      await expect.poll(async () => (await audio(p)).started, { message: name }).toBe(layers)
+      await ctx.close()
+    }
+  })
+
+  test('the choice, auto play and volume are saved', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
     await page.getByRole('button', { name: 'Settings' }).click()
-    const vol = page.getByLabel('Volume', { exact: true })
-    await vol.fill('0.7')
+    await expect(page.getByRole('radio', { name: /Thunderstorm/ })).toBeChecked()
+    await page.getByRole('radio', { name: /^Rain/ }).check({ force: true })
+    await page.getByRole('switch', { name: /Play it while I focus/ }).uncheck()
+    await page.getByLabel('Volume', { exact: true }).fill('0.7')
     await page.getByRole('button', { name: 'Close Settings' }).click()
     await page.reload()
     await page.getByRole('button', { name: 'Settings' }).click()
+    await expect(page.getByRole('radio', { name: /^Rain/ })).toBeChecked()
+    await expect(page.getByRole('switch', { name: /Play it while I focus/ })).not.toBeChecked()
     await expect(page.getByLabel('Volume', { exact: true })).toHaveValue('0.7')
+  })
+
+  test('after a reload mid-session it picks up again at the next key press', async ({ page }) => {
+    await watchAudio(page)
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+    await page.reload()
+    await ready(page)
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+    await page.mouse.click(5, 300)
+    await expect.poll(async () => (await audio(page)).started).toBeGreaterThanOrEqual(3)
+  })
+})
+
+test.describe('tasks', () => {
+  test.use({ reducedMotion: 'reduce' })
+  const add = async (page: Page, text: string) => {
+    await page.getByLabel('New task').fill(text)
+    await page.keyboard.press('Enter')
+  }
+
+  test('T opens an empty list with a hint, and Esc closes it', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('t')
+    await expect(page.getByRole('dialog', { name: 'Tasks' })).toBeVisible()
+    await expect(page.getByText(/Nothing here yet/)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  test('adding, ticking off, deleting and clearing', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.getByRole('button', { name: 'Tasks' }).click()
+    await add(page, 'Revise Laplace transforms')
+    await add(page, 'Past paper 2023')
+    await add(page, '   ')
+    const list = page.getByTestId('tasks')
+    await expect(list.locator('li')).toHaveCount(2)
+    await expect(page.getByText('2 to do')).toBeVisible()
+    await page.getByRole('checkbox', { name: 'Revise Laplace transforms' }).check()
+    await expect(page.getByText('1 to do, 1 done')).toBeVisible()
+    await expect(list.locator('li').last()).toContainText('Revise Laplace transforms')
+    await page.getByRole('button', { name: 'Clear done' }).click()
+    await expect(list.locator('li')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Delete Past paper 2023' }).click()
+    await expect(page.getByText(/Nothing here yet/)).toBeVisible()
+  })
+
+  test('the button shows how many are left and the list survives a reload', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('t')
+    await add(page, 'One')
+    await add(page, 'Two')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: 'Tasks, 2 to do' })).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('button', { name: 'Tasks, 2 to do' })).toBeVisible()
+    await page.keyboard.press('t')
+    await expect(page.getByTestId('tasks').locator('li')).toHaveCount(2)
+  })
+
+  test('"Study this" puts the task in the Studying field', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('t')
+    await add(page, 'Z-transform problems')
+    await page.getByRole('button', { name: 'Study this: Z-transform problems' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: 'Studying' })).toHaveValue('Z-transform problems')
+  })
+
+  test('typing in the task field does not trigger shortcuts', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('t')
+    await page.getByLabel('New task').fill('')
+    await page.keyboard.type('m r b 4 t')
+    await expect(page.getByLabel('New task')).toHaveValue('m r b 4 t')
+    await expect(page.locator('.app')).toHaveAttribute('data-scene', 'ribbon')
+  })
+
+  test('a very long task wraps instead of overflowing', async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 640 }, reducedMotion: 'reduce' })
+    const page = await ctx.newPage()
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('t')
+    await add(page, 'x'.repeat(120))
+    await add(page, 'Read the whole chapter on feedback amplifiers and write the summary table')
+    const overflow = await page.evaluate(() => {
+      const d = document.querySelector('dialog[open]') as HTMLElement
+      return d.scrollWidth - d.clientWidth
+    })
+    expect(overflow).toBeLessThanOrEqual(0)
+    await ctx.close()
   })
 })
 

@@ -4,6 +4,8 @@ export type Status = 'idle' | 'running' | 'paused' | 'completed'
 
 export type Outcome = 'completed' | 'early'
 
+export type AmbientId = 'brown' | 'rain' | 'storm'
+
 export type SceneId = 'ribbon' | 'nebula' | 'aurora' | 'ripples' | 'drift' | 'still'
 
 /** Which tool is on screen. Only one of them is ever active. */
@@ -25,7 +27,11 @@ export interface Settings {
   dailyGoalMin: number
   /** Animated background. */
   scene: SceneId
-  /** Brown noise level, 0 to 1. The noise itself never starts on its own. */
+  /** Which ambient sound is played. */
+  ambient: AmbientId
+  /** Start the ambient sound with each focus session or stopwatch run, and fade it out when that ends. */
+  ambientAuto: boolean
+  /** Ambient sound level, 0 to 1. */
   noiseVolume: number
 }
 

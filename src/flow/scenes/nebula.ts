@@ -12,7 +12,8 @@ interface Star {
 }
 
 const STAR_COLORS = ['rgb(255,246,232)', 'rgb(205,222,255)', 'rgb(255,214,196)', 'rgb(236,226,255)']
-const CLOUD_HUES = [318, 276, 232, 196, 340, 256]
+// Mostly indigo and blue with a little violet and one faint warm note, so it reads as a night sky first.
+const CLOUD_HUES = [262, 242, 224, 282, 204, 306]
 
 function makeCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas')
@@ -31,15 +32,15 @@ function buildLayer(size: number, seed: number, blobs: number): HTMLCanvasElemen
     const cy = size * (0.16 + rnd() * 0.68)
     const r = size * (0.1 + rnd() * 0.2)
     const stretch = 0.4 + rnd() * 0.75
-    const a = 0.15 + rnd() * 0.2
+    const a = 0.14 + rnd() * 0.18
     x.save()
     x.translate(cx, cy)
     x.rotate(rnd() * Math.PI)
     x.scale(1, stretch)
     const g = x.createRadialGradient(0, 0, 0, 0, 0, r)
-    g.addColorStop(0, `hsla(${hue}, 90%, 60%, ${a})`)
-    g.addColorStop(0.5, `hsla(${hue}, 80%, 46%, ${a * 0.42})`)
-    g.addColorStop(1, `hsla(${hue}, 80%, 40%, 0)`)
+    g.addColorStop(0, `hsla(${hue}, 74%, 58%, ${a})`)
+    g.addColorStop(0.5, `hsla(${hue}, 64%, 46%, ${a * 0.42})`)
+    g.addColorStop(1, `hsla(${hue}, 56%, 40%, 0)`)
     x.fillStyle = g
     x.beginPath()
     x.arc(0, 0, r, 0, Math.PI * 2)
@@ -61,7 +62,7 @@ function buildGlow(): HTMLCanvasElement {
 }
 
 /**
- * Colourful clouds and a field of twinkling stars. Two cloud layers turn very
+ * A field of twinkling stars over soft, muted clouds. Two cloud layers turn very
  * slowly in opposite directions, stars drift sideways at different depths.
  */
 export function createNebula(): Scene {
@@ -78,7 +79,7 @@ export function createNebula(): Scene {
       layerB = buildLayer(layerSize, 23, 12)
       glow = buildGlow()
       const rnd = mulberry32(11)
-      const count = Math.round(Math.min(420, Math.max(90, (w * h) / 6000)))
+      const count = Math.round(Math.min(760, Math.max(170, (w * h) / 3100)))
       stars = Array.from({ length: count }, () => {
         const z = 0.2 + rnd() * 0.8
         return {
@@ -89,7 +90,7 @@ export function createNebula(): Scene {
           tw: 0.5 + rnd() * 1.6,
           ph: rnd() * Math.PI * 2,
           color: STAR_COLORS[Math.floor(rnd() * STAR_COLORS.length)],
-          bright: rnd() > 0.94,
+          bright: rnd() > 0.965,
         }
       })
     },
@@ -131,7 +132,7 @@ export function createNebula(): Scene {
       for (const s of stars) {
         let x = (s.x - drift * s.z) % w
         if (x < 0) x += w
-        const a = s.z * 0.95 * (0.62 + 0.38 * Math.sin(t * s.tw + s.ph)) * bright
+        const a = s.z * 1.05 * (0.62 + 0.38 * Math.sin(t * s.tw + s.ph)) * bright
         ctx.globalAlpha = Math.min(1, a)
         if (s.bright) {
           const d = 10 + s.z * 12

@@ -11,8 +11,9 @@ A minimal, ambient study timer for focused work, deliberate breaks and consisten
 - **Focus, short break and long break** timers. Defaults are 25 / 5 / 15 minutes, and every length is configurable (1 to 180 minutes for focus).
 - **Reliable timing.** The countdown is computed from an absolute end timestamp, never from counting interval ticks, so it stays correct through background tabs, throttling, laptop sleep and reloads.
 - **Stopwatch.** For open-ended work with no target. It counts up, pauses and resumes, and saves a history entry when you finish. Runs under a minute are not saved. If the device sleeps or the tab is closed while it runs, it pauses at the last moment the app was alive, so time away is never counted as study time.
-- **Six backgrounds**, chosen in Settings or cycled with `B`: Ribbon (the original), Nebula (a colourful starfield), Aurora, Ripples, Drift (warm dust in lamplight) and Still (no motion). Each one slows to a stop when you pause, and none of them speeds up or brightens as time runs out.
-- **Brown noise**, off by default and never on after a reload. Toggle it with the speaker button or `M`. It is generated in the browser, so there is no audio file to load.
+- **Six backgrounds**, chosen in Settings or cycled with `B`: Ribbon (the original), Nebula (a dense starfield over muted indigo clouds), Aurora, Ripples, Drift (warm dust in lamplight) and Still (no motion). Each one slows to a stop when you pause, and none of them speeds up or brightens as time runs out.
+- **Background sound:** a thunderstorm (rain with distant thunder), plain rain, or brown noise. By default the storm starts with each focus session or stopwatch run and fades out when you pause or finish. Breaks stay quiet. `M` mutes it for the rest of that session, and you can turn the auto start off in Settings. Everything is generated in the browser, so there are no audio files to load.
+- **Tasks.** A short list you open with the checklist button or `T`. Add, tick off, delete, and clear what is done. "Study this" copies a task into the Studying field. It stays out of the way: the main screen only shows how many are left. Up to 100 tasks, saved in your browser.
 - **Session tracking.** Completed sessions and total focus time for today, plus an optional daily goal shown as a quiet progress bar.
 - **Session notes.** Write what you are studying before you start, and add an optional "review next" note when a session ends.
 - **History.** Date, time, duration, topic and whether each session finished or ended early. Delete single entries or clear everything (with confirmation).
@@ -33,9 +34,11 @@ A minimal, ambient study timer for focused work, deliberate breaks and consisten
 | --- | --- |
 | ![Stopwatch](docs/screenshots/stopwatch.png) | ![Complete](docs/screenshots/complete.png) |
 
-| History | Settings |
+| Tasks | Settings |
 | --- | --- |
-| ![History](docs/screenshots/history.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Tasks](docs/screenshots/tasks.png) | ![Settings](docs/screenshots/settings.png) |
+
+![History](docs/screenshots/history.png)
 
 On a phone:
 
@@ -43,7 +46,7 @@ On a phone:
 
 ## Tech stack
 
-React 19, TypeScript, Vite, plain CSS, Canvas 2D for the backgrounds, WebAudio for the chime and brown noise. Geist font via `@fontsource-variable/geist` (bundled, no CDN). Tests use Vitest and Playwright.
+React 19, TypeScript, Vite, plain CSS, Canvas 2D for the backgrounds, WebAudio for the chime and background sound. Geist font via `@fontsource-variable/geist` (bundled, no CDN). Tests use Vitest and Playwright.
 
 ## Prerequisites
 
@@ -83,7 +86,8 @@ To use the built app, serve `dist/` with any static file server (`npm run previe
 | `1` / `2` / `3` | Focus / short break / long break |
 | `4` | Stopwatch |
 | `B` | Next background |
-| `M` | Brown noise on or off |
+| `M` | Background sound on or off |
+| `T` | Open your tasks |
 | `F` | Toggle full screen |
 | `?` | Show the shortcut list |
 | `Esc` | Cancel a pending reset, or close a panel |
@@ -103,7 +107,7 @@ Shortcuts are ignored while you type in a field or while a dialog is open. When 
 
 ## Data and privacy
 
-Everything stays in your browser's `localStorage` under keys starting with `lumaflow.v1.`: settings (including your background and noise volume), the current timer and stopwatch state, and up to 1000 history entries. Nothing is sent anywhere. Clear it from the History panel, or by clearing site data in your browser. If `localStorage` is unavailable (some private modes), the app still works for the current page but cannot remember anything.
+Everything stays in your browser's `localStorage` under keys starting with `lumaflow.v1.`: settings (including your background and sound), the current timer and stopwatch state, your tasks, and up to 1000 history entries. Nothing is sent anywhere. Clear it from the History panel, or by clearing site data in your browser. If `localStorage` is unavailable (some private modes), the app still works for the current page but cannot remember anything.
 
 ## Known limitations
 
@@ -111,7 +115,8 @@ Everything stays in your browser's `localStorage` under keys starting with `luma
 - **Fully backgrounded tabs.** Browsers can throttle timers to about once a minute. The recorded time is exact, but the chime or notification may arrive up to roughly a minute late.
 - **Chime needs a gesture.** Browsers block audio until you interact with the page. Starting the timer counts, so this only matters if you enable sound mid-session and never touch the page.
 - **Notifications** need explicit permission and a secure context (`localhost` or HTTPS).
-- **Brown noise** has not been listened to on the machine it was built on. The browser tests only check that it toggles and that it is never on after a reload. Set the volume to taste in Settings.
+- **The sounds have not been listened to** on the machine they were built on. They are synthesised from filtered noise, with randomly timed thunder, and the tests check the generated audio (level, loop joins, thunder fading to silence) and that it starts and stops with the session. If the mix is too loud, too bright or too busy for you, change the volume or pick Rain or Brown noise in Settings.
+- **After a reload mid-session** the browser will not start audio until you click or press a key once, so the sound resumes on your first interaction.
 - **Backgrounds on slow hardware.** The animated ones are capped at 30 frames per second and stop completely when the tab is hidden or the timer is paused. If your machine struggles, pick Still.
 - **No cross-device sync.** By design.
 - Automated tests run in Chromium only. Firefox and Safari should work but are unverified.
@@ -124,12 +129,13 @@ LumaFlow is a focus aid. It is not a substitute for active recall, practice ques
 src/
   core/        Pure logic, no React: timer.ts (state transitions), stats.ts, storage.ts,
                format.ts, controller.ts (persistence, ticking, events), plus unit tests
-               stopwatch.ts (count-up state, away handling)
+               stopwatch.ts (count-up state, away handling), tasks.ts and taskStore.ts (to-do list)
   flow/        Background engine: flow.ts (ribbon maths), scene.ts (shared interface),
                scenes/ (ribbon, nebula, aurora, ripples, drift, still)
-  components/  TimerDial, ModeTabs, Controls, StatsDock, dialogs, FlowCanvas
-  hooks/       useTimer, useShortcuts, useReducedMotion
-  feedback/    chime.ts, noise.ts (WebAudio), notify.ts (Notifications API)
+  components/  TimerDial, ModeTabs, Controls, StatsDock, TasksDialog, other dialogs, FlowCanvas
+  hooks/       useTimer, useTasks, useShortcuts, useReducedMotion
+  feedback/    chime.ts, ambient.ts (rain, storm, brown noise), ambientData.ts (sample generators),
+               audio.ts (shared context), notify.ts (Notifications API)
   styles.css
 e2e/           Playwright browser tests
 docs/screenshots/

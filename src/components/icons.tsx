@@ -119,3 +119,10 @@ export function StateGlyph({ status }: { status: 'idle' | 'running' | 'paused' |
     </svg>
   )
 }
+
+export const IconTasks = () => (
+  <svg {...base}>
+    <path d="M4.5 7.5l1.6 1.6 2.9-3.1M4.5 16.5l1.6 1.6 2.9-3.1" />
+    <path d="M12.5 7.5H20M12.5 16.5H20" />
+  </svg>
+)

@@ -67,3 +67,27 @@ describe('log', () => {
     expect(save(broken, KEYS.log, [])).toBeNull()
   })
 })
+
+describe('sound and background settings', () => {
+  it('default to the storm sound playing with a session', () => {
+    expect(DEFAULT_SETTINGS.ambient).toBe('storm')
+    expect(DEFAULT_SETTINGS.ambientAuto).toBe(true)
+  })
+
+  it('accept the known sounds and reject anything else', () => {
+    for (const id of ['brown', 'rain', 'storm']) {
+      const s = memoryStorage()
+      save(s, KEYS.settings, { ambient: id })
+      expect(loadSettings(s).ambient).toBe(id)
+    }
+    const s = memoryStorage()
+    save(s, KEYS.settings, { ambient: 'whale song', ambientAuto: 'yes', noiseVolume: 9 })
+    expect(loadSettings(s)).toMatchObject({ ambient: 'storm', ambientAuto: true, noiseVolume: 1 })
+  })
+
+  it('keep a deliberate choice to turn the auto start off', () => {
+    const s = memoryStorage()
+    save(s, KEYS.settings, { ambientAuto: false })
+    expect(loadSettings(s).ambientAuto).toBe(false)
+  })
+})

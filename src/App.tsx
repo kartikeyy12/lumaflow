@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TimerController } from './core/controller'
+import type { TaskStore } from './core/taskStore'
+import { openCount } from './core/tasks'
 import { MODE_LABEL, formatClock, formatElapsed, spokenDuration } from './core/format'
 import { statsForDay } from './core/stats'
 import { MIN_LOGGABLE_MS, durationFor, getElapsed, getProgress, nextMode } from './core/timer'
@@ -13,40 +15,46 @@ import {
   IconScene,
   IconSettings,
   IconSound,
+  IconTasks,
 } from './components/icons'
 import { LogDialog } from './components/LogDialog'
 import { ModeTabs, type Tab } from './components/ModeTabs'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { StatsDock } from './components/StatsDock'
+import { TasksDialog } from './components/TasksDialog'
 import { TimerDial } from './components/TimerDial'
 import type { FlowState } from './flow/flow'
 import { SCENE_BY_ID, nextScene } from './flow/scenes'
 import { unlockAudio } from './feedback/chime'
-import { setNoiseVolume, startNoise, stopNoise } from './feedback/noise'
+import { ambientKind, setAmbientVolume, startAmbient, stopAmbient } from './feedback/ambient'
 import { useReducedMotion } from './hooks/useReducedMotion'
 import { useShortcuts } from './hooks/useShortcuts'
+import { useTasks } from './hooks/useTasks'
 import { useTimer } from './hooks/useTimer'
 
 type Pending = { kind: 'reset' } | { kind: 'tab'; tab: Tab } | null
-type Panel = 'settings' | 'log' | 'help' | null
+type Panel = 'settings' | 'log' | 'help' | 'tasks' | null
 
 const CONFIRM_MS = 4000
 const HOUR_MS = 3_600_000
 const TAB_KEY: Record<Tab, string> = { focus: '1', short: '2', long: '3', stopwatch: '4' }
 const TAB_LABEL: Record<Tab, string> = { ...MODE_LABEL, stopwatch: 'Stopwatch' }
 
-export default function App({ controller }: { controller: TimerController }) {
+export default function App({ controller, taskStore }: { controller: TimerController; taskStore: TaskStore }) {
+  const tasks = useTasks(taskStore)
   const { timer, stopwatch, view, settings, log, now, notice, remaining, elapsed } = useTimer(controller)
   const reduced = useReducedMotion()
   const [panel, setPanel] = useState<Panel>(null)
   const [pending, setPending] = useState<Pending>(null)
   const [announce, setAnnounce] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
-  const [noiseOn, setNoiseOn] = useState(false)
+  // null follows the settings; true or false is a deliberate press of the sound button.
+  const [soundOverride, setSoundOverride] = useState<boolean | null>(null)
   const canFullscreen = typeof document !== 'undefined' && !!document.documentElement.requestFullscreen
 
   const stopwatchView = view === 'stopwatch'
+  const phaseKey = stopwatchView ? stopwatch.runId : timer.phaseId
   const tab: Tab = stopwatchView ? 'stopwatch' : timer.mode
   const today = useMemo(() => statsForDay(log, now), [log, now])
   const entry = useMemo(() => log.find((e) => e.id === timer.phaseId) ?? null, [log, timer.phaseId])
@@ -66,10 +74,10 @@ export default function App({ controller }: { controller: TimerController }) {
   }, [pending, clearPending])
 
   const toggle = useCallback(() => {
-    if (settings.sound) unlockAudio()
+    if (settings.sound || settings.ambientAuto) unlockAudio()
     setPending(null)
     controller.toggle()
-  }, [controller, settings.sound])
+  }, [controller, settings.sound, settings.ambientAuto])
 
   const requestReset = useCallback(() => {
     if (stopwatchView ? stopwatch.status === 'idle' : timer.status === 'idle') return
@@ -97,10 +105,10 @@ export default function App({ controller }: { controller: TimerController }) {
 
   const startNext = useCallback(
     (mode?: Parameters<TimerController['startNext']>[0]) => {
-      if (settings.sound) unlockAudio()
+      if (settings.sound || settings.ambientAuto) unlockAudio()
       controller.startNext(mode)
     },
-    [controller, settings.sound],
+    [controller, settings.sound, settings.ambientAuto],
   )
 
   const toggleFullscreen = useCallback(() => {
@@ -113,19 +121,55 @@ export default function App({ controller }: { controller: TimerController }) {
     controller.updateSettings({ scene: nextScene(settings.scene) })
   }, [controller, settings.scene])
 
-  const toggleNoise = useCallback(async () => {
-    if (noiseOn) {
-      stopNoise()
-      setNoiseOn(false)
+  // Sound follows the session: it plays during focus and stopwatch runs, and fades out otherwise.
+  // Pressing the sound button (or M) overrides that until the next session starts.
+  const sessionActive = stopwatchView ? stopwatch.status === 'running' : timer.status === 'running' && timer.mode === 'focus'
+  const soundWanted = soundOverride ?? (settings.ambientAuto && sessionActive)
+  // A muted sound stays muted through pauses, and comes back with the next session.
+  useEffect(() => {
+    setSoundOverride((o) => (o === false ? null : o))
+  }, [phaseKey])
+
+  const toggleSound = useCallback(() => {
+    unlockAudio()
+    setSoundOverride(!soundWanted)
+  }, [soundWanted])
+
+  const volume = useRef(settings.noiseVolume)
+  volume.current = settings.noiseVolume
+  useEffect(() => {
+    if (!soundWanted) {
+      stopAmbient()
       return
     }
-    setNoiseOn(await startNoise(settings.noiseVolume))
-  }, [noiseOn, settings.noiseVolume])
+    if (ambientKind() && ambientKind() !== settings.ambient) stopAmbient()
+    let cancelled = false
+    const retry = () => void attempt()
+    const disarm = () => {
+      window.removeEventListener('pointerup', retry)
+      window.removeEventListener('keydown', retry)
+    }
+    // After a reload the browser blocks audio until the next click or key press, so try again then.
+    const attempt = async () => {
+      const ok = await startAmbient(settings.ambient, volume.current)
+      if (cancelled) return
+      if (ok) disarm()
+      else {
+        window.addEventListener('pointerup', retry, { once: true })
+        window.addEventListener('keydown', retry, { once: true })
+      }
+    }
+    void attempt()
+    return () => {
+      cancelled = true
+      disarm()
+    }
+  }, [soundWanted, settings.ambient])
 
   useEffect(() => {
-    if (noiseOn) setNoiseVolume(settings.noiseVolume)
-  }, [noiseOn, settings.noiseVolume])
-  useEffect(() => () => stopNoise(), [])
+    setAmbientVolume(settings.noiseVolume)
+  }, [settings.noiseVolume])
+  useEffect(() => () => stopAmbient(), [])
 
   useEffect(() => {
     const onChange = () => setFullscreen(Boolean(document.fullscreenElement))
@@ -138,7 +182,8 @@ export default function App({ controller }: { controller: TimerController }) {
     reset: requestReset,
     mode: requestTab,
     scene: cycleScene,
-    noise: () => void toggleNoise(),
+    noise: toggleSound,
+    tasks: () => setPanel('tasks'),
     fullscreen: toggleFullscreen,
     help: () => setPanel('help'),
     cancel: () => setPending(null),
@@ -147,7 +192,6 @@ export default function App({ controller }: { controller: TimerController }) {
   // Screen reader announcements for state changes (not for every second).
   const lastAnnounced = useRef('')
   const status = stopwatchView ? stopwatch.status : timer.status
-  const phaseKey = stopwatchView ? stopwatch.runId : timer.phaseId
   useEffect(() => {
     const label = TAB_LABEL[tab]
     const mins = Math.round(timer.durationMs / 60_000)
@@ -237,13 +281,28 @@ export default function App({ controller }: { controller: TimerController }) {
           <button
             type="button"
             className="icon-btn"
-            onClick={() => void toggleNoise()}
-            aria-label="Brown noise"
-            aria-pressed={noiseOn}
+            onClick={toggleSound}
+            aria-label="Background sound"
+            aria-pressed={soundWanted}
             aria-keyshortcuts="M"
-            title="Brown noise (M)"
+            title="Background sound (M)"
           >
             <IconSound />
+          </button>
+          <button
+            type="button"
+            className="icon-btn icon-btn-count"
+            onClick={() => setPanel('tasks')}
+            aria-label={openCount(tasks) > 0 ? `Tasks, ${openCount(tasks)} to do` : 'Tasks'}
+            aria-keyshortcuts="T"
+            title="Tasks (T)"
+          >
+            <IconTasks />
+            {openCount(tasks) > 0 && (
+              <span className="count-dot" aria-hidden="true">
+                {Math.min(openCount(tasks), 99)}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -261,7 +320,7 @@ export default function App({ controller }: { controller: TimerController }) {
           {canFullscreen && (
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn hide-narrow"
               onClick={toggleFullscreen}
               aria-label={fullscreen ? 'Exit full screen' : 'Enter full screen'}
               aria-pressed={fullscreen}
@@ -347,6 +406,19 @@ export default function App({ controller }: { controller: TimerController }) {
         now={now}
         onDelete={controller.deleteEntry}
         onClear={controller.clearLog}
+      />
+      <TasksDialog
+        open={panel === 'tasks'}
+        onClose={() => setPanel(null)}
+        tasks={tasks}
+        onAdd={taskStore.add}
+        onToggle={taskStore.toggle}
+        onRemove={taskStore.remove}
+        onClearDone={taskStore.clearDone}
+        onFocusOn={(text) => {
+          controller.setTopic(text)
+          setPanel(null)
+        }}
       />
       <ShortcutsDialog open={panel === 'help'} onClose={() => setPanel(null)} />
     </div>

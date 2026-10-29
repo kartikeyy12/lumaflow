@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications: false,
   dailyGoalMin: 0,
   scene: 'ribbon',
+  ambient: 'storm',
+  ambientAuto: true,
   noiseVolume: 0.3,
 }
 

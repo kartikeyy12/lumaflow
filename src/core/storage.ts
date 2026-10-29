@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, LIMITS, clamp } from './timer'
-import type { LogEntry, Mode, Outcome, SceneId, Settings, Status, StopwatchState, TimerState, View } from './types'
+import type { AmbientId, LogEntry, Mode, Outcome, SceneId, Settings, Status, StopwatchState, TimerState, View } from './types'
 
 export const KEYS = {
   settings: 'lumaflow.v1.settings',
@@ -7,6 +7,7 @@ export const KEYS = {
   log: 'lumaflow.v1.log',
   stopwatch: 'lumaflow.v1.stopwatch',
   view: 'lumaflow.v1.view',
+  tasks: 'lumaflow.v1.tasks',
 } as const
 
 export interface StorageLike {
@@ -50,6 +51,7 @@ const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.i
 const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
 const str = (v: unknown, fallback: string, max = 300) => (typeof v === 'string' ? v.slice(0, max) : fallback)
 
+export const AMBIENT_IDS: AmbientId[] = ['brown', 'rain', 'storm']
 export const SCENE_IDS: SceneId[] = ['ribbon', 'nebula', 'aurora', 'ripples', 'drift', 'still']
 
 export function sanitizeSettings(raw: unknown): Settings {
@@ -66,6 +68,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     notifications: bool(r.notifications, d.notifications),
     dailyGoalMin: Math.round(clamp(num(r.dailyGoalMin, d.dailyGoalMin), ...LIMITS.dailyGoalMin)),
     scene: SCENE_IDS.includes(r.scene as SceneId) ? (r.scene as SceneId) : d.scene,
+    ambient: AMBIENT_IDS.includes(r.ambient as AmbientId) ? (r.ambient as AmbientId) : d.ambient,
+    ambientAuto: bool(r.ambientAuto, d.ambientAuto),
     noiseVolume: clamp(num(r.noiseVolume, d.noiseVolume), 0, 1),
   }
 }

@@ -7,6 +7,7 @@ export interface ShortcutHandlers {
   mode: (tab: Tab) => void
   scene: () => void
   noise: () => void
+  tasks: () => void
   fullscreen: () => void
   help: () => void
   cancel: () => void
@@ -61,6 +62,7 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       else if (key === 'f') h.fullscreen()
       else if (key === 'b') h.scene()
       else if (key === 'm') h.noise()
+      else if (key === 't') h.tasks()
       else if (e.key === '?') h.help()
       else return
       e.preventDefault()
