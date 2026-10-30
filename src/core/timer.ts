@@ -19,7 +19,9 @@ export const DEFAULT_SETTINGS: Settings = {
   dailyGoalMin: 0,
   scene: 'ribbon',
   ambient: 'storm',
+  beat: 'off',
   ambientAuto: true,
+  fadeUi: true,
   todoOpen: true,
   noiseVolume: 0.3,
 }

@@ -1,10 +1,15 @@
 import { useEffect, useId, useState } from 'react'
 import { LIMITS, MAX_AUTO_CHAIN } from '../core/timer'
-import type { Settings, TimerState } from '../core/types'
+import { BEATS, beatLabel } from '../core/sounds'
+import type { BeatId, Settings, TimerState } from '../core/types'
 import { AMBIENTS } from '../feedback/ambient'
 import { previewChime } from '../feedback/chime'
 import { notificationPermission, requestNotificationPermission } from '../feedback/notify'
 import { SCENES } from '../flow/scenes'
+import type { Backup } from '../core/backup'
+import type { Task } from '../core/tasks'
+import type { LogEntry } from '../core/types'
+import { DataSection } from './DataSection'
 import { Modal } from './Modal'
 
 interface Props {
@@ -13,9 +18,13 @@ interface Props {
   settings: Settings
   timer: TimerState
   onChange: (patch: Partial<Settings>) => void
+  tasks: Task[]
+  log: LogEntry[]
+  now: number
+  onRestore: (backup: Backup) => { sessions: number; todos: number }
 }
 
-export function SettingsDialog({ open, onClose, settings, timer, onChange }: Props) {
+export function SettingsDialog({ open, onClose, settings, timer, onChange, tasks, log, now, onRestore }: Props) {
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null)
   const active = timer.status === 'running' || timer.status === 'paused'
 
@@ -40,6 +49,12 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
           ))}
         </div>
         <p className="muted small">Press B anywhere to switch to the next one.</p>
+        <Toggle
+          label="Fade everything but the clock"
+          hint="While a session runs, the buttons and panels fade after a few seconds. Move the mouse or press a key to bring them back."
+          checked={settings.fadeUi}
+          onChange={(v) => onChange({ fadeUi: v })}
+        />
       </section>
 
       <section className="set-group" aria-labelledby="set-lengths">
@@ -149,6 +164,23 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
             </label>
           ))}
         </div>
+        <div className="beat-row">
+          <label htmlFor="beat">Binaural beat</label>
+          <select id="beat" value={settings.beat} onChange={(e) => onChange({ beat: e.target.value as BeatId })}>
+            <option value="off">Off</option>
+            {BEATS.map((b) => (
+              <option key={b.id} value={b.id}>
+                {beatLabel(b)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {settings.beat !== 'off' && (
+          <p className="muted small">
+            Needs headphones. It plays quietly under the sound above. Research on whether beats help focus is mixed, so treat it as a
+            preference, not a promise.
+          </p>
+        )}
         <Toggle
           label="Play it while I focus"
           hint="Starts with each focus session or stopwatch run and fades out when you pause or finish. Breaks stay quiet."
@@ -169,6 +201,7 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange }: Pro
         </div>
         <p className="muted small">Press M to switch it on or off at any time.</p>
       </section>
+      <DataSection settings={settings} tasks={tasks} log={log} now={now} onRestore={onRestore} />
     </Modal>
   )
 }

@@ -1,4 +1,5 @@
-import type { AmbientId } from '../core/types'
+import { beatTones, type Ambient } from '../core/sounds'
+import type { AmbientId, BeatId } from '../core/types'
 import { getAudioContext, resumeAudio } from './audio'
 import { brownLoop, dropsLoop, thunderBurst, whiteLoop } from './ambientData'
 
@@ -6,17 +7,23 @@ export const AMBIENTS: Array<{ id: AmbientId; label: string; note: string }> = [
   { id: 'brown', label: 'Brown noise', note: 'A soft low rumble' },
   { id: 'rain', label: 'Rain', note: 'Steady rain on a roof' },
   { id: 'storm', label: 'Thunderstorm', note: 'Rain with distant thunder' },
+  { id: 'match', label: 'Match background', note: 'Each background has its own' },
+  { id: 'none', label: 'None', note: 'Only the beat, if one is on' },
 ]
 
 const LOOP_SECONDS = 12
 const FADE_FRACTION = 0.12
 const THUNDER_SECONDS = 11
 const MAX_GAIN = 0.5
+/** The beat sits well under the rain or noise, and a little higher when it plays alone. */
+const BEAT_GAIN_WITH_SOUND = 0.2
+const BEAT_GAIN_ALONE = 0.4
 
 type LoopKind = 'brown' | 'white' | 'drops'
 
 interface Engine {
-  kind: AmbientId
+  kind: Ambient | null
+  beat: BeatId
   master: GainNode
   sources: AudioScheduledSourceNode[]
   nodes: AudioNode[]
@@ -56,7 +63,7 @@ interface Layer {
   gain: number
 }
 
-const LAYERS: Record<AmbientId, Layer[]> = {
+const LAYERS: Record<Ambient, Layer[]> = {
   brown: [{ buffer: 'brown', filters: [{ type: 'lowpass', frequency: 1400 }], gain: 1 }],
   rain: [
     // The steady wash, the low roar underneath it, and the individual drops.
@@ -96,6 +103,26 @@ function addLoop(ctx: AudioContext, e: Engine, layer: Layer) {
   e.nodes.push(gain)
   source.start(ctx.currentTime, Math.random() * LOOP_SECONDS)
   e.sources.push(source)
+}
+
+/** Two sine tones, one in each ear. Heard through headphones, the ears together pick out the difference as a slow pulse. */
+function addBeat(ctx: AudioContext, e: Engine, beat: BeatId, withSound: boolean) {
+  const tones = beatTones(beat)
+  if (!tones) return
+  const merger = ctx.createChannelMerger(2)
+  const gain = ctx.createGain()
+  gain.gain.value = withSound ? BEAT_GAIN_WITH_SOUND : BEAT_GAIN_ALONE
+  merger.connect(gain).connect(e.master)
+  e.nodes.push(merger, gain)
+  ;[tones.left, tones.right].forEach((hz, ear) => {
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.value = hz
+    osc.connect(merger, 0, ear)
+    osc.start()
+    e.sources.push(osc)
+    e.nodes.push(osc)
+  })
 }
 
 /** One roll of thunder, played now. It fades out on its own and removes itself. */
@@ -148,12 +175,13 @@ export function ambientIsOn(): boolean {
   return engine !== null
 }
 
-export function ambientKind(): AmbientId | null {
-  return engine ? engine.kind : null
+/** What is playing now, so the caller can restart it when the choice changes. */
+export function ambientPlaying(): { kind: Ambient | null; beat: BeatId } | null {
+  return engine ? { kind: engine.kind, beat: engine.beat } : null
 }
 
 /** Starts a sound. Must be called from a user gesture. Resolves false if audio is unavailable. */
-export async function startAmbient(kind: AmbientId, volume: number): Promise<boolean> {
+export async function startAmbient(kind: Ambient | null, beat: BeatId, volume: number): Promise<boolean> {
   if (engine) return true
   const mine = ++generation
   const ctx = await resumeAudio()
@@ -169,8 +197,9 @@ export async function startAmbient(kind: AmbientId, volume: number): Promise<boo
   limiter.attack.value = 0.01
   limiter.release.value = 0.4
   master.connect(limiter).connect(ctx.destination)
-  const e: Engine = { kind, master, sources: [], nodes: [master, limiter], timer: null }
-  for (const layer of LAYERS[kind]) addLoop(ctx, e, layer)
+  const e: Engine = { kind, beat, master, sources: [], nodes: [master, limiter], timer: null }
+  if (kind) for (const layer of LAYERS[kind]) addLoop(ctx, e, layer)
+  addBeat(ctx, e, beat, kind !== null)
   if (kind === 'storm') scheduleThunder(ctx, e, true)
   master.gain.setTargetAtTime(level(volume), ctx.currentTime, 0.4)
   engine = e

@@ -14,3 +14,12 @@ createRoot(document.getElementById('root') as HTMLElement).render(
     <App controller={controller} taskStore={taskStore} />
   </StrictMode>,
 )
+
+// Offline use and installing as an app. Only in the built site, never while developing.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Private windows and some browsers refuse. The app works the same without it.
+    })
+  })
+}

@@ -126,3 +126,10 @@ export const IconTodo = () => (
     <path d="M12.5 7.5H20M12.5 16.5H20" />
   </svg>
 )
+
+export const IconPip = () => (
+  <svg {...base}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <rect x="12" y="11.5" width="6.5" height="4.5" rx="1" fill="currentColor" stroke="none" />
+  </svg>
+)

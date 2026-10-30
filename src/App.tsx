@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TimerController } from './core/controller'
 import type { TaskStore } from './core/taskStore'
-import { openCount } from './core/tasks'
+import { hasSound, resolveAmbient } from './core/sounds'
+import { openCount, type Task } from './core/tasks'
 import { MODE_LABEL, formatClock, formatElapsed, spokenDuration } from './core/format'
 import { statsForDay } from './core/stats'
 import { MIN_LOGGABLE_MS, durationFor, getElapsed, getProgress, nextMode } from './core/timer'
@@ -12,6 +13,7 @@ import {
   IconCollapse,
   IconExpand,
   IconKeyboard,
+  IconPip,
   IconScene,
   IconSettings,
   IconSound,
@@ -28,10 +30,15 @@ import { TimerDial } from './components/TimerDial'
 import type { FlowState } from './flow/flow'
 import { SCENE_BY_ID, nextScene } from './flow/scenes'
 import { unlockAudio } from './feedback/chime'
-import { ambientKind, setAmbientVolume, startAmbient, stopAmbient } from './feedback/ambient'
+import { ambientPlaying, setAmbientVolume, startAmbient, stopAmbient } from './feedback/ambient'
 import { useReducedMotion } from './hooks/useReducedMotion'
 import { useShortcuts } from './hooks/useShortcuts'
 import { useMedia } from './hooks/useMedia'
+import { useIdle } from './hooks/useIdle'
+import { usePip } from './hooks/usePip'
+import { createPortal } from 'react-dom'
+import { MiniTimer } from './components/MiniTimer'
+import type { MiniData } from './pip/mini'
 import { useTasks } from './hooks/useTasks'
 import { useTimer } from './hooks/useTimer'
 
@@ -39,6 +46,8 @@ type Pending = { kind: 'reset' } | { kind: 'tab'; tab: Tab } | null
 type Panel = 'settings' | 'log' | 'help' | 'tasks' | null
 
 const CONFIRM_MS = 4000
+/** How long the screen has to be left alone before the extras fade. */
+const IDLE_MS = 6000
 /** Wide enough to keep the to-do list beside the timer without crowding it. */
 const WIDE_QUERY = '(min-width: 1180px)'
 const HOUR_MS = 3_600_000
@@ -49,6 +58,8 @@ export default function App({ controller, taskStore }: { controller: TimerContro
   const tasks = useTasks(taskStore)
   const wide = useMedia(WIDE_QUERY)
   const [todoFocus, setTodoFocus] = useState(0)
+  // The to-do item chosen with "Study". It only counts while the Studying field still says the same thing.
+  const [studyId, setStudyId] = useState<string | null>(null)
   const { timer, stopwatch, view, settings, log, now, notice, remaining, elapsed } = useTimer(controller)
   const reduced = useReducedMotion()
   const [panel, setPanel] = useState<Panel>(null)
@@ -130,16 +141,24 @@ export default function App({ controller, taskStore }: { controller: TimerContro
   // Sound follows the session: it plays during focus and stopwatch runs, and fades out otherwise.
   // Pressing the sound button (or M) overrides that until the next session starts.
   const sessionActive = stopwatchView ? stopwatch.status === 'running' : timer.status === 'running' && timer.mode === 'focus'
-  const soundWanted = soundOverride ?? (settings.ambientAuto && sessionActive)
+  const idle = useIdle(settings.fadeUi && sessionActive && panel === null, IDLE_MS)
+  const playable = hasSound(settings)
+  const soundKind = resolveAmbient(settings.ambient, settings.scene)
+  const soundWanted = playable && (soundOverride ?? (settings.ambientAuto && sessionActive))
   // A muted sound stays muted through pauses, and comes back with the next session.
   useEffect(() => {
     setSoundOverride((o) => (o === false ? null : o))
   }, [phaseKey])
 
   const toggleSound = useCallback(() => {
+    // With no sound chosen there is nothing to switch on, so take the person to where they choose one.
+    if (!playable) {
+      setPanel('settings')
+      return
+    }
     unlockAudio()
     setSoundOverride(!soundWanted)
-  }, [soundWanted])
+  }, [playable, soundWanted])
 
   const volume = useRef(settings.noiseVolume)
   volume.current = settings.noiseVolume
@@ -148,7 +167,8 @@ export default function App({ controller, taskStore }: { controller: TimerContro
       stopAmbient()
       return
     }
-    if (ambientKind() && ambientKind() !== settings.ambient) stopAmbient()
+    const playing = ambientPlaying()
+    if (playing && (playing.kind !== soundKind || playing.beat !== settings.beat)) stopAmbient()
     let cancelled = false
     const retry = () => void attempt()
     const disarm = () => {
@@ -157,7 +177,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
     }
     // After a reload the browser blocks audio until the next click or key press, so try again then.
     const attempt = async () => {
-      const ok = await startAmbient(settings.ambient, volume.current)
+      const ok = await startAmbient(soundKind, settings.beat, volume.current)
       if (cancelled) return
       if (ok) disarm()
       else {
@@ -170,7 +190,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
       cancelled = true
       disarm()
     }
-  }, [soundWanted, settings.ambient])
+  }, [soundWanted, soundKind, settings.beat])
 
   useEffect(() => {
     setAmbientVolume(settings.noiseVolume)
@@ -209,8 +229,9 @@ export default function App({ controller, taskStore }: { controller: TimerContro
     onToggle: taskStore.toggle,
     onRemove: taskStore.remove,
     onClearDone: taskStore.clearDone,
-    onFocusOn: (text: string) => {
-      controller.setTopic(text)
+    onFocusOn: (task: Task) => {
+      controller.setTopic(task.text)
+      setStudyId(task.id)
       setPanel(null)
     },
   }
@@ -222,6 +243,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
     scene: cycleScene,
     noise: toggleSound,
     tasks: () => openTodo(true),
+    pip: () => pip.toggle(),
     fullscreen: toggleFullscreen,
     help: () => setPanel('help'),
     cancel: () => setPending(null),
@@ -230,6 +252,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
   // Screen reader announcements for state changes (not for every second).
   const lastAnnounced = useRef('')
   const status = stopwatchView ? stopwatch.status : timer.status
+  const upcomingMode = nextMode(timer, settings)
   useEffect(() => {
     const label = TAB_LABEL[tab]
     const mins = Math.round(timer.durationMs / 60_000)
@@ -244,6 +267,21 @@ export default function App({ controller, taskStore }: { controller: TimerContro
     else setAnnounce(stopwatchView ? 'Stopwatch ready.' : `${label} ready, ${mins} minutes.`)
   }, [phaseKey, status, tab, timer.durationMs, stopwatchView])
 
+  const completedTimer = !stopwatchView && timer.status === 'completed'
+  const mini = useMemo<MiniData>(() => {
+    const running = status === 'running'
+    return {
+      label: stopwatchView ? 'Stopwatch' : MODE_LABEL[timer.mode],
+      clock: stopwatchView ? formatElapsed(elapsed) : formatClock(remaining),
+      spoken: stopwatchView ? `${spokenDuration(elapsed)} elapsed` : `${spokenDuration(Math.ceil(remaining / 1000) * 1000)} remaining`,
+      status,
+      action: completedTimer ? `Start ${MODE_LABEL[upcomingMode].toLowerCase()}` : running ? 'Pause' : status === 'paused' ? 'Resume' : 'Start',
+      running,
+      scene: settings.scene,
+    }
+  }, [stopwatchView, timer.mode, elapsed, remaining, status, completedTimer, upcomingMode, settings.scene])
+  const pip = usePip(mini, () => (completedTimer ? startNext(upcomingMode) : toggle()))
+
   const flowState: FlowState =
     status === 'paused'
       ? 'paused'
@@ -255,7 +293,10 @@ export default function App({ controller, taskStore }: { controller: TimerContro
             ? 'focus'
             : timer.mode
 
-  const upcoming = nextMode(timer, settings)
+  const linkedTask = tasks.find((t) => t.id === studyId && !t.done && t.text === timer.topic) ?? null
+  const offerDone = linkedTask !== null && !stopwatchView && timer.mode === 'focus' && timer.status === 'completed'
+
+  const upcoming = upcomingMode
   let hint: string
   if (pending?.kind === 'reset') {
     hint = stopwatchView
@@ -271,7 +312,9 @@ export default function App({ controller, taskStore }: { controller: TimerContro
   } else if (timer.status === 'completed') {
     hint = timer.endedBy === 'away' ? 'This one ended while LumaFlow was not running.' : ''
   } else {
-    hint = `Next: ${MODE_LABEL[upcoming]} · ${Math.round(durationFor(upcoming, settings) / 60_000)} min`
+    const next = `Next: ${MODE_LABEL[upcoming]} · ${Math.round(durationFor(upcoming, settings) / 60_000)} min`
+    // Which focus session this is within the cycle before a long break.
+    hint = timer.mode === 'focus' ? `Session ${Math.min(timer.cycle + 1, settings.longBreakEvery)} of ${settings.longBreakEvery} · ${next}` : next
   }
 
   const dial = stopwatchView
@@ -295,7 +338,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
       }
 
   return (
-    <div className="app" data-flow={flowState} data-scene={settings.scene}>
+    <div className="app" data-flow={flowState} data-scene={settings.scene} data-idle={idle ? '' : undefined}>
       <FlowCanvas
         key={settings.scene}
         scene={settings.scene}
@@ -353,6 +396,19 @@ export default function App({ controller, taskStore }: { controller: TimerContro
           >
             <IconScene />
           </button>
+          {pip.kind && (
+            <button
+              type="button"
+              className="icon-btn hide-narrow"
+              onClick={pip.toggle}
+              aria-label={pip.active ? 'Close the small timer' : 'Open the small timer'}
+              aria-pressed={pip.active}
+              aria-keyshortcuts="P"
+              title="Small floating timer (P)"
+            >
+              <IconPip />
+            </button>
+          )}
           <button type="button" className="icon-btn hide-touch" onClick={() => setPanel('help')} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
             <IconKeyboard />
           </button>
@@ -414,6 +470,12 @@ export default function App({ controller, taskStore }: { controller: TimerContro
           onReviewNext={controller.setReviewNext}
         />
 
+        {offerDone && linkedTask && (
+          <button type="button" className="btn btn-sm btn-quiet mark-done" onClick={() => taskStore.toggle(linkedTask.id)}>
+            Mark “{linkedTask.text}” done
+          </button>
+        )}
+
         <p className={`hint${pending ? ' hint-alert' : ''}`} role="status" aria-live="polite">
           {hint}
         </p>
@@ -448,6 +510,13 @@ export default function App({ controller, taskStore }: { controller: TimerContro
         settings={settings}
         timer={timer}
         onChange={controller.updateSettings}
+        tasks={tasks}
+        log={log}
+        now={now}
+        onRestore={(backup) => {
+          controller.updateSettings(backup.settings)
+          return { sessions: controller.importSessions(backup.log), todos: taskStore.importTasks(backup.tasks) }
+        }}
       />
       <LogDialog
         open={panel === 'log'}
@@ -460,6 +529,7 @@ export default function App({ controller, taskStore }: { controller: TimerContro
       />
       <TodoDialog open={panel === 'tasks'} onClose={() => setPanel(null)} tasks={tasks} {...todoHandlers} />
       <ShortcutsDialog open={panel === 'help'} onClose={() => setPanel(null)} />
+      {pip.container && createPortal(<MiniTimer data={mini} onAction={() => (completedTimer ? startNext(upcomingMode) : toggle())} />, pip.container)}
     </div>
   )
 }

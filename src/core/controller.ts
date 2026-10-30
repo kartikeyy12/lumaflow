@@ -1,3 +1,4 @@
+import { mergeLogs } from './backup'
 import { appendEntry, dayKey } from './stats'
 import {
   KEYS,
@@ -465,6 +466,16 @@ export class TimerController {
     this.log = this.log.filter((e) => e.id !== id)
     this.write(KEYS.log, this.log)
     this.publish()
+  }
+
+  /** Adds sessions from a backup that are not here yet. Returns how many were added. */
+  importSessions = (incoming: LogEntry[]): number => {
+    const { log, added } = mergeLogs(this.log, incoming)
+    if (added === 0) return 0
+    this.log = log
+    this.write(KEYS.log, this.log)
+    this.publish()
+    return added
   }
 
   clearLog = () => {

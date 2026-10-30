@@ -10,6 +10,7 @@ export const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: 'B', action: 'Next background' },
   { keys: 'M', action: 'Background sound on or off' },
   { keys: 'T', action: 'To-do list: open it and start typing' },
+  { keys: 'P', action: 'Small floating timer, to see the clock while you work in another window' },
   { keys: 'F', action: 'Toggle full screen' },
   { keys: '?', action: 'Show this list' },
   { keys: 'Esc', action: 'Cancel a pending reset or close a panel' },

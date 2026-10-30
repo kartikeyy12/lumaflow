@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { formatDayLabel, formatDuration, formatTimeOfDay } from '../core/format'
-import { dayKey, type DayStats } from '../core/stats'
+import { dayKey, lastDays, type DayStats } from '../core/stats'
 import type { LogEntry } from '../core/types'
 import { IconClose } from './icons'
 import { Modal } from './Modal'
+import { WeekChart } from './WeekChart'
 
 interface Props {
   open: boolean
@@ -47,6 +48,8 @@ export function LogDialog({ open, onClose, log, today, now, onDelete, onClear }:
         Today: {today.sessions} completed {today.sessions === 1 ? 'session' : 'sessions'}, {formatDuration(today.focusedMs)} focused.
         A session counts toward the day it ended. Ended-early sessions add their time but are not counted as completed.
       </p>
+
+      {log.length > 0 && <WeekChart days={lastDays(log, now)} today={dayKey(now)} />}
 
       {log.length === 0 ? (
         <p className="empty">No sessions yet. Finished focus sessions will appear here.</p>

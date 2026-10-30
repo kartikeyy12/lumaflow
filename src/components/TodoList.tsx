@@ -9,7 +9,7 @@ export interface TodoHandlers {
   onRemove: (id: string) => void
   onClearDone: () => void
   /** Puts the item in the "Studying" field. */
-  onFocusOn: (text: string) => void
+  onFocusOn: (task: Task) => void
 }
 
 interface Props extends TodoHandlers {
@@ -85,7 +85,7 @@ export function TodoList({ tasks, autoFocus, inputId, onAdd, onToggle, onRemove,
                   <button
                     type="button"
                     className="todo-study"
-                    onClick={() => onFocusOn(t.text)}
+                    onClick={() => onFocusOn(t)}
                     aria-label={`Study this: ${t.text}`}
                     title="Put this in the Studying field"
                   >

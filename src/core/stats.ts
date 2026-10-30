@@ -36,3 +36,28 @@ export function appendEntry(log: LogEntry[], entry: LogEntry, cap = 1000): LogEn
   const next = [entry, ...log].sort((a, b) => b.endedAt - a.endedAt)
   return next.length > cap ? next.slice(0, cap) : next
 }
+
+export interface DayTotal {
+  key: string
+  /** Local noon of that day, safe to format as a weekday. */
+  at: number
+  focusedMs: number
+}
+
+/** Focus time for each of the last `days` local days, oldest first, ending with today. */
+export function lastDays(log: LogEntry[], now: number, days = 7): DayTotal[] {
+  const out: DayTotal[] = []
+  for (let back = days - 1; back >= 0; back--) {
+    const d = new Date(now)
+    d.setHours(12, 0, 0, 0)
+    d.setDate(d.getDate() - back)
+    const key = dayKey(d.getTime())
+    out.push({ key, at: d.getTime(), focusedMs: 0 })
+  }
+  const slot = new Map(out.map((d) => [d.key, d]))
+  for (const e of log) {
+    const hit = slot.get(dayKey(e.endedAt))
+    if (hit) hit.focusedMs += e.durationMs
+  }
+  return out
+}

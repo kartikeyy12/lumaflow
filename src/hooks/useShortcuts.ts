@@ -8,6 +8,7 @@ export interface ShortcutHandlers {
   scene: () => void
   noise: () => void
   tasks: () => void
+  pip: () => void
   fullscreen: () => void
   help: () => void
   cancel: () => void
@@ -63,6 +64,7 @@ export function useShortcuts(handlers: ShortcutHandlers) {
       else if (key === 'b') h.scene()
       else if (key === 'm') h.noise()
       else if (key === 't') h.tasks()
+      else if (key === 'p') h.pip()
       else if (e.key === '?') h.help()
       else return
       e.preventDefault()

@@ -209,8 +209,13 @@ test.describe('background motion', () => {
 /** Counts how many sound sources the page starts and stops, so tests can tell when audio is really running. */
 async function watchAudio(page: Page) {
   await page.addInitScript(() => {
-    const w = window as unknown as { __audio: { started: number; stopped: number } }
-    w.__audio = { started: 0, stopped: 0 }
+    const w = window as unknown as { __audio: { started: number; stopped: number; tones: number[] } }
+    w.__audio = { started: 0, stopped: 0, tones: [] }
+    const oscStart = OscillatorNode.prototype.start
+    OscillatorNode.prototype.start = function (...a: Parameters<typeof oscStart>) {
+      w.__audio.tones.push(Math.round(this.frequency.value))
+      return oscStart.apply(this, a)
+    }
     const proto = AudioBufferSourceNode.prototype
     const start = proto.start
     const stop = proto.stop
@@ -225,7 +230,7 @@ async function watchAudio(page: Page) {
   })
 }
 const audio = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __audio: { started: number; stopped: number } }).__audio)
+  page.evaluate(() => (window as unknown as { __audio: { started: number; stopped: number; tones: number[] } }).__audio)
 const soundBtn = (page: Page) => page.getByRole('button', { name: 'Background sound' })
 
 test.describe('background sound', () => {
@@ -340,6 +345,90 @@ test.describe('background sound', () => {
     await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
     await page.mouse.click(5, 300)
     await expect.poll(async () => (await audio(page)).started).toBeGreaterThanOrEqual(3)
+  })
+})
+
+test.describe('sound choices and binaural beats', () => {
+  test.use({ reducedMotion: 'reduce' })
+  const withSettings = (page: Page, settings: object) =>
+    page.addInitScript((v) => localStorage.setItem('lumaflow.v1.settings', JSON.stringify(v)), settings)
+
+  for (const [beat, hz] of [['theta', 6], ['alpha', 10], ['beta', 15], ['gamma', 40]] as const) {
+    test(`${beat} plays one tone in each ear, ${hz} Hz apart`, async ({ page }) => {
+      await watchAudio(page)
+      await withSettings(page, { ambient: 'brown', beat })
+      await page.goto('/')
+      await ready(page)
+      await page.keyboard.press('Space')
+      await expect.poll(async () => (await audio(page)).tones.length).toBe(2)
+      const { tones, started } = await audio(page)
+      expect(tones[1] - tones[0]).toBe(hz)
+      expect(started).toBe(1)
+    })
+  }
+
+  test('a beat on its own plays no rain or noise', async ({ page }) => {
+    await watchAudio(page)
+    await withSettings(page, { ambient: 'none', beat: 'alpha' })
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect.poll(async () => (await audio(page)).tones.length).toBe(2)
+    expect((await audio(page)).started).toBe(0)
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('with the beat off no tones are made', async ({ page }) => {
+    await watchAudio(page)
+    await withSettings(page, { ambient: 'rain', beat: 'off' })
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect.poll(async () => (await audio(page)).started).toBe(3)
+    expect((await audio(page)).tones).toEqual([])
+  })
+
+  test('with no sound at all the sound button opens Settings', async ({ page }) => {
+    await withSettings(page, { ambient: 'none', beat: 'off' })
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Running', { exact: true })).toBeVisible()
+    await expect(soundBtn(page)).toHaveAttribute('aria-pressed', 'false')
+    await page.keyboard.press('m')
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+  })
+
+  test('"Match background" gives the quiet backgrounds noise and the watery ones rain', async ({ page }) => {
+    await watchAudio(page)
+    await withSettings(page, { ambient: 'match', scene: 'ribbon' })
+    await page.goto('/')
+    await ready(page)
+    await page.keyboard.press('Space')
+    await expect.poll(async () => (await audio(page)).started).toBe(1)
+    // B steps ribbon, nebula, aurora. Aurora is a rain background.
+    await page.keyboard.press('b')
+    await page.keyboard.press('b')
+    await expect(page.locator('.app')).toHaveAttribute('data-scene', 'aurora')
+    await expect.poll(async () => (await audio(page)).started).toBe(4)
+  })
+
+  test('the beat and the sound choice can be picked in Settings and are saved', async ({ page }) => {
+    await page.goto('/')
+    await ready(page)
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await expect(page.getByRole('radio', { name: /Match background/ })).toBeVisible()
+    await expect(page.getByRole('radio', { name: /^None/ })).toBeVisible()
+    await expect(page.getByText(/Needs headphones/)).toHaveCount(0)
+    await page.getByLabel('Binaural beat').selectOption('gamma')
+    await expect(page.getByText(/Needs headphones/)).toBeVisible()
+    await expect(page.getByText(/Research on whether beats help focus is mixed/)).toBeVisible()
+    await page.getByRole('radio', { name: /Match background/ }).check({ force: true })
+    await page.getByRole('button', { name: 'Close Settings' }).click()
+    await page.reload()
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await expect(page.getByLabel('Binaural beat')).toHaveValue('gamma')
+    await expect(page.getByRole('radio', { name: /Match background/ })).toBeChecked()
   })
 })
 
@@ -491,6 +580,62 @@ test.describe('to-do list', () => {
       expect(box && box.y + box.height <= vp.height - 40, `${vp.width}x${vp.height} bottom`).toBe(true)
       await ctx.close()
     }
+  })
+})
+
+test.describe('polish', () => {
+  test.use({ reducedMotion: 'reduce' })
+
+  test('the hint says which focus session of the cycle this is', async ({ page }) => {
+    await open(page)
+    await expect(page.getByText(/^Session 1 of 4/)).toBeVisible()
+    await page.getByRole('button', { name: 'Start' }).click()
+    await live(page, 25 * MIN + 5000)
+    await page.getByRole('button', { name: /Start short break/ }).click()
+    await page.keyboard.press('1')
+    await expect(page.getByText(/^Session 2 of 4/)).toBeVisible()
+  })
+
+  test('finishing a session on a to-do offers to tick it off', async ({ page }) => {
+    await open(page)
+    await page.getByLabel('New to-do').fill('Past paper 2023')
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'Study this: Past paper 2023' }).click()
+    await expect(page.getByRole('button', { name: /Mark .* done/ })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Start' }).click()
+    await live(page, 25 * MIN + 5000)
+    const mark = page.getByRole('button', { name: 'Mark “Past paper 2023” done' })
+    await expect(mark).toBeVisible()
+    await mark.click()
+    await expect(mark).toHaveCount(0)
+    await expect(page.getByTestId('todo-panel').getByRole('checkbox', { name: /Past paper 2023/ })).toBeChecked()
+  })
+
+  test('no offer when the Studying text was changed afterwards', async ({ page }) => {
+    await open(page)
+    await page.getByLabel('New to-do').fill('Past paper 2023')
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'Study this: Past paper 2023' }).click()
+    await page.getByRole('textbox', { name: 'Studying' }).fill('Something else')
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Start' }).click()
+    await live(page, 25 * MIN + 5000)
+    await expect(page.getByText('Complete', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Mark .* done/ })).toHaveCount(0)
+  })
+
+  test('History shows a 7-day chart once there is a session', async ({ page }) => {
+    await open(page)
+    await page.getByRole('button', { name: 'History' }).click()
+    await expect(page.getByTestId('week-chart')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Start' }).click()
+    await live(page, 25 * MIN + 5000)
+    await page.getByRole('button', { name: 'History' }).click()
+    const chart = page.getByTestId('week-chart')
+    await expect(chart).toBeVisible()
+    await expect(chart.locator('.week-col')).toHaveCount(7)
+    await expect(chart.locator('.week-today')).toHaveCount(1)
   })
 })
 

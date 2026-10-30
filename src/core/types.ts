@@ -4,7 +4,10 @@ export type Status = 'idle' | 'running' | 'paused' | 'completed'
 
 export type Outcome = 'completed' | 'early'
 
-export type AmbientId = 'brown' | 'rain' | 'storm'
+/** 'match' picks a sound to suit the current background. 'none' is for using a binaural beat on its own. */
+export type AmbientId = 'brown' | 'rain' | 'storm' | 'match' | 'none'
+
+export type BeatId = 'off' | 'theta' | 'alpha' | 'beta' | 'gamma'
 
 export type SceneId = 'ribbon' | 'nebula' | 'aurora' | 'ripples' | 'drift' | 'still'
 
@@ -29,10 +32,14 @@ export interface Settings {
   scene: SceneId
   /** Which ambient sound is played. */
   ambient: AmbientId
+  /** Binaural beat layered under the ambient sound. Needs headphones. */
+  beat: BeatId
   /** Start the ambient sound with each focus session or stopwatch run, and fade it out when that ends. */
   ambientAuto: boolean
   /** Show the to-do list beside the timer on wide screens. */
   todoOpen: boolean
+  /** Fade the buttons and panels away a few seconds after the last input while a session runs. */
+  fadeUi: boolean
   /** Ambient sound level, 0 to 1. */
   noiseVolume: number
 }

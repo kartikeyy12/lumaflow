@@ -1,4 +1,5 @@
 import { KEYS, save, type StorageLike } from './storage'
+import { mergeTasks } from './backup'
 import { addTask, clearDone, removeTask, sanitizeTasks, toggleTask, type Task } from './tasks'
 
 interface Options {
@@ -39,6 +40,13 @@ export class TaskStore {
   toggle = (id: string) => this.set(toggleTask(this.tasks, id, this.clock()))
   remove = (id: string) => this.set(removeTask(this.tasks, id))
   clearDone = () => this.set(clearDone(this.tasks))
+
+  /** Adds items from a backup that are not here yet. Returns how many were added. */
+  importTasks = (incoming: Task[]): number => {
+    const { tasks, added } = mergeTasks(this.tasks, incoming)
+    if (added > 0) this.set(tasks)
+    return added
+  }
 
   /** Follows changes made in another tab. Returns the cleanup function. */
   attach = () => {
