@@ -40,6 +40,7 @@ export class TaskStore {
   toggle = (id: string) => this.set(toggleTask(this.tasks, id, this.clock()))
   remove = (id: string) => this.set(removeTask(this.tasks, id))
   clearDone = () => this.set(clearDone(this.tasks))
+  clearAll = () => this.set([])
 
   /** Adds items from a backup that are not here yet. Returns how many were added. */
   importTasks = (incoming: Task[]): number => {

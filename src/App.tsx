@@ -513,6 +513,11 @@ export default function App({ controller, taskStore }: { controller: TimerContro
         tasks={tasks}
         log={log}
         now={now}
+        onStartFresh={(opts) => {
+          controller.startFresh(opts)
+          taskStore.clearAll()
+          setStudyId(null)
+        }}
         onRestore={(backup) => {
           controller.updateSettings(backup.settings)
           return { sessions: controller.importSessions(backup.log), todos: taskStore.importTasks(backup.tasks) }

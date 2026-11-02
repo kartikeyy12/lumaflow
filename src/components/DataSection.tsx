@@ -21,6 +21,8 @@ interface Props {
   now: number
   /** Applies a backup and returns how many sessions and to-do items it added. */
   onRestore: (backup: Backup) => { sessions: number; todos: number }
+  /** Clears history, to-dos and the timer. Settings only when asked. */
+  onStartFresh: (opts: { settings: boolean }) => void
 }
 
 type Status =
@@ -28,11 +30,13 @@ type Status =
   | { kind: 'error'; text: string }
   | { kind: 'done'; text: string }
   | { kind: 'confirm'; backup: Backup; sessions: number; todos: number }
+  | { kind: 'fresh' }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-export function DataSection({ settings, tasks, log, now, onRestore }: Props) {
+export function DataSection({ settings, tasks, log, now, onRestore, onStartFresh }: Props) {
   const [status, setStatus] = useState<Status>({ kind: 'none' })
+  const [alsoSettings, setAlsoSettings] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
 
   const choose = async (file: File | undefined) => {
@@ -87,6 +91,16 @@ export function DataSection({ settings, tasks, log, now, onRestore }: Props) {
         <button type="button" className="btn btn-sm btn-quiet" onClick={() => picker.current?.click()}>
           Restore from backup
         </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-quiet"
+          onClick={() => {
+            setAlsoSettings(false)
+            setStatus({ kind: 'fresh' })
+          }}
+        >
+          Start fresh
+        </button>
         <input
           ref={picker}
           type="file"
@@ -104,6 +118,33 @@ export function DataSection({ settings, tasks, log, now, onRestore }: Props) {
       <div role="status" aria-live="polite" className="data-status">
         {status.kind === 'error' && <p className="small data-error">{status.text}</p>}
         {status.kind === 'done' && <p className="small">{status.text}</p>}
+        {status.kind === 'fresh' && (
+          <div className="data-confirm">
+            <p className="small">
+              This clears your history, your to-do list and the timer, so everything starts again from zero. It cannot be undone, so download a
+              backup first if you might want any of it back.
+            </p>
+            <label className="check-line small">
+              <input type="checkbox" checked={alsoSettings} onChange={(e) => setAlsoSettings(e.target.checked)} />
+              <span>Also put settings back to their defaults (session lengths, daily goal, sound)</span>
+            </label>
+            <div className="data-actions">
+              <button
+                type="button"
+                className="btn btn-sm btn-warn"
+                onClick={() => {
+                  onStartFresh({ settings: alsoSettings })
+                  setStatus({ kind: 'done', text: alsoSettings ? 'Everything is back to zero, settings included.' : 'Everything is back to zero. Your settings were kept.' })
+                }}
+              >
+                Yes, start fresh
+              </button>
+              <button type="button" className="btn btn-sm btn-quiet" onClick={() => setStatus({ kind: 'none' })}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {status.kind === 'confirm' && (
           <div className="data-confirm">
             <p className="small">

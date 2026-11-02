@@ -27,6 +27,7 @@ import {
 import {
   applySettingsToPhase,
   beginNext,
+  DEFAULT_SETTINGS,
   createPhase,
   earlyEntry,
   evaluate,
@@ -482,6 +483,28 @@ export class TimerController {
     this.log = []
     this.write(KEYS.log, this.log)
     this.publish()
+  }
+
+  /**
+   * Back to zero: history, the running or finished session, the stopwatch and the session count.
+   * Settings are kept unless asked, because they are preferences and not progress.
+   */
+  startFresh = (opts: { settings?: boolean } = {}) => {
+    const now = this.clock()
+    if (opts.settings) {
+      this.settings = { ...DEFAULT_SETTINGS }
+      this.write(KEYS.settings, this.settings)
+    }
+    this.log = []
+    this.write(KEYS.log, this.log)
+    this.timer = createPhase('focus', this.settings, now)
+    this.persistTimer()
+    this.stopwatch = createStopwatch(now)
+    this.persistStopwatch()
+    this.view = 'timer'
+    this.persistView()
+    this.notice = null
+    this.publish(now)
   }
 
   dismissNotice = () => {

@@ -253,3 +253,43 @@ describe('background setting', () => {
     expect(s.settings).toMatchObject({ scene: 'drift', noiseVolume: 0.8 })
   })
 })
+
+describe('start fresh', () => {
+  it('clears history, the session and the stopwatch, and keeps settings', () => {
+    const h = setup()
+    h.c.updateSettings({ focusMin: 40, dailyGoalMin: 120 })
+    h.c.setTopic('Signals')
+    h.c.start()
+    runLive(h, 40 * MIN + 5000)
+    expect(h.c.getSnapshot().log).toHaveLength(1)
+    h.c.switchToStopwatch()
+    h.c.start()
+    runLive(h, 3 * MIN)
+    h.c.startFresh()
+    const s = h.c.getSnapshot()
+    expect(s.log).toHaveLength(0)
+    expect(s.view).toBe('timer')
+    expect(s.timer).toMatchObject({ mode: 'focus', status: 'idle', cycle: 0, topic: '' })
+    expect(s.stopwatch.status).toBe('idle')
+    expect(s.settings).toMatchObject({ focusMin: 40, dailyGoalMin: 120 })
+    expect(statsForDay(s.log, h.now).sessions).toBe(0)
+  })
+
+  it('can put settings back to their defaults too', () => {
+    const h = setup()
+    h.c.updateSettings({ focusMin: 40, dailyGoalMin: 120, scene: 'drift' })
+    h.c.startFresh({ settings: true })
+    expect(h.c.getSnapshot().settings).toMatchObject({ focusMin: 25, dailyGoalMin: 0, scene: 'ribbon' })
+  })
+
+  it('is saved, so a reload stays at zero', () => {
+    const h = setup()
+    h.c.start()
+    runLive(h, 25 * MIN + 5000)
+    h.c.startFresh()
+    const s = h.make().getSnapshot()
+    expect(s.log).toHaveLength(0)
+    expect(s.timer.status).toBe('idle')
+    expect(loadLog(h.storage)).toHaveLength(0)
+  })
+})

@@ -22,9 +22,10 @@ interface Props {
   log: LogEntry[]
   now: number
   onRestore: (backup: Backup) => { sessions: number; todos: number }
+  onStartFresh: (opts: { settings: boolean }) => void
 }
 
-export function SettingsDialog({ open, onClose, settings, timer, onChange, tasks, log, now, onRestore }: Props) {
+export function SettingsDialog({ open, onClose, settings, timer, onChange, tasks, log, now, onRestore, onStartFresh }: Props) {
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null)
   const active = timer.status === 'running' || timer.status === 'paused'
 
@@ -201,7 +202,7 @@ export function SettingsDialog({ open, onClose, settings, timer, onChange, tasks
         </div>
         <p className="muted small">Press M to switch it on or off at any time.</p>
       </section>
-      <DataSection settings={settings} tasks={tasks} log={log} now={now} onRestore={onRestore} />
+      <DataSection settings={settings} tasks={tasks} log={log} now={now} onRestore={onRestore} onStartFresh={onStartFresh} />
     </Modal>
   )
 }

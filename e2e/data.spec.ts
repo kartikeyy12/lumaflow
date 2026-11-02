@@ -137,3 +137,39 @@ test.describe('your data', () => {
     expect(await page.locator('img[src="x"]').count()).toBe(0)
   })
 })
+
+test.describe('start fresh', () => {
+  test('asks first, then clears history, to-dos and the timer', async ({ page }) => {
+    await openSettings(page, seed)
+    await page.getByRole('button', { name: 'Start fresh' }).click()
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Close Settings' }).click()
+    await expect(page.getByTestId('todo-panel').getByText('Past paper 2023')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByRole('button', { name: 'Start fresh' }).click()
+    await page.getByRole('button', { name: 'Yes, start fresh' }).click()
+    await expect(page.getByText(/Everything is back to zero. Your settings were kept/)).toBeVisible()
+    await page.getByRole('button', { name: 'Close Settings' }).click()
+
+    await expect(page.getByTestId('todo-panel').getByText('Past paper 2023')).toHaveCount(0)
+    await expect(page.locator('.stats dd').first()).toHaveText('0')
+    await page.getByRole('button', { name: 'History' }).click()
+    await expect(page.getByText('No sessions yet')).toBeVisible()
+    await page.keyboard.press('Escape')
+    // The chosen focus length was kept.
+    await expect(page.getByRole('timer')).toHaveAccessibleName('40 minutes remaining')
+    await page.reload()
+    await expect(page.getByTestId('todo-panel').getByText('Past paper 2023')).toHaveCount(0)
+    await expect(page.getByRole('timer')).toHaveAccessibleName('40 minutes remaining')
+  })
+
+  test('can reset settings as well', async ({ page }) => {
+    await openSettings(page, seed)
+    await page.getByRole('button', { name: 'Start fresh' }).click()
+    await page.getByRole('checkbox', { name: /Also put settings back/ }).check()
+    await page.getByRole('button', { name: 'Yes, start fresh' }).click()
+    await page.getByRole('button', { name: 'Close Settings' }).click()
+    await expect(page.getByRole('timer')).toHaveAccessibleName('25 minutes remaining')
+  })
+})
